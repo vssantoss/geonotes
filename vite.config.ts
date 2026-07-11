@@ -1,10 +1,18 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  resolve: {
+    // "@/..." import alias used by shadcn/ui components (mirrors tsconfig paths).
+    alias: {
+      '@': new URL('./src', import.meta.url).pathname,
+    },
+  },
   plugins: [
     react(),
+    tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'apple-touch-icon-180x180.png'],
@@ -12,8 +20,8 @@ export default defineConfig({
         name: 'GeoNotes',
         short_name: 'GeoNotes',
         description: 'Short notes tied to the places where they matter.',
-        theme_color: '#f4f2ee',
-        background_color: '#f4f2ee',
+        theme_color: '#f1f2eb',
+        background_color: '#f1f2eb',
         display: 'standalone',
         orientation: 'portrait',
         icons: [

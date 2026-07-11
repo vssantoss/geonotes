@@ -4,11 +4,29 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="Short notes tied to the places where they matter." />
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f4f2ee" />
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#16181d" />
+    <meta name="theme-color" content="#f1f2eb" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon-180x180.png" />
     <title>GeoNotes</title>
+    <script>
+      // Apply the stored theme before first paint to avoid a light flash.
+      // Kept in sync with THEME_STORAGE_KEY / THEME_COLOR in src/lib/theme.tsx.
+      ;(function () {
+        try {
+          var pref = localStorage.getItem('geonotes-theme')
+          var dark =
+            pref === 'dark' ||
+            (pref !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+          if (dark) {
+            document.documentElement.classList.add('dark')
+            var meta = document.querySelector('meta[name="theme-color"]')
+            if (meta) meta.setAttribute('content', '#161a17')
+          }
+        } catch (e) {
+          /* storage blocked: stay on the light default */
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>
