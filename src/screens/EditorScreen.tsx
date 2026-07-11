@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react'
+import { MapPin } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
 import { createNote, deleteNote, updateNoteText } from '../lib/notes'
 import { reverseGeocode } from '../lib/api'
 import { renderBold } from '../lib/bold'
@@ -71,42 +74,61 @@ export function EditorScreen({ target, onDone }: { target: EditorTarget; onDone:
   }
 
   return (
-    <div className="editor">
-      <h2 style={{ margin: '4px 0 0' }}>
+    <div className="flex flex-1 flex-col gap-3 px-4 pt-2 pb-6">
+      <h2 className="font-display text-lg font-semibold tracking-tight">
         {t(target.kind === 'edit' ? 'editor.edit' : 'editor.new')}
       </h2>
 
-      <div className="location">
-        📍{' '}
-        {resolving
-          ? t('editor.resolvingAddress')
-          : (address ?? `${location.lat.toFixed(5)}, ${location.lng.toFixed(5)}`)}
-        {target.kind === 'new' && <> · {t('editor.locationLocked')}</>}
+      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm text-muted-foreground">
+        <MapPin className="size-4 shrink-0 text-primary" aria-hidden />
+        {resolving ? (
+          t('editor.resolvingAddress')
+        ) : (
+          (address ?? (
+            <span className="font-mono text-[13px]">
+              {`${location.lat.toFixed(5)}, ${location.lng.toFixed(5)}`}
+            </span>
+          ))
+        )}
+        {target.kind === 'new' && (
+          <span className="rounded-full bg-accent px-2 py-0.5 text-xs text-accent-foreground">
+            {t('editor.locationLocked')}
+          </span>
+        )}
       </div>
 
-      <textarea
+      <Textarea
         autoFocus
         maxLength={NOTE_MAX_LENGTH}
         placeholder={t('editor.placeholder')}
         value={text}
         onChange={(e) => setText(e.target.value.slice(0, NOTE_MAX_LENGTH))}
+        className="min-h-40 resize-y bg-card text-base"
       />
       <CharCounter used={text.length} />
 
-      {text.includes('**') && <div className="preview">{renderBold(text)}</div>}
+      {text.includes('**') && (
+        <div className="rounded-lg border border-dashed px-3 py-2 text-sm wrap-anywhere whitespace-pre-wrap text-muted-foreground">
+          {renderBold(text)}
+        </div>
+      )}
 
-      <div className="actions">
+      <div className="flex gap-2">
         {target.kind === 'edit' && (
-          <button className="btn danger" onClick={() => setConfirming(true)} style={{ marginRight: 'auto' }}>
+          <Button
+            variant="ghost"
+            className="mr-auto text-destructive hover:bg-destructive/10 hover:text-destructive"
+            onClick={() => setConfirming(true)}
+          >
             {t('editor.delete')}
-          </button>
+          </Button>
         )}
-        <button className="btn" onClick={onDone}>
+        <Button variant="outline" className="ml-auto" onClick={onDone}>
           {t('editor.cancel')}
-        </button>
-        <button className="btn primary" disabled={text.trim().length === 0} onClick={() => void save()}>
+        </Button>
+        <Button disabled={text.trim().length === 0} onClick={() => void save()}>
           {t('editor.save')}
-        </button>
+        </Button>
       </div>
 
       {confirming && (

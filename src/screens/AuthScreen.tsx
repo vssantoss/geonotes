@@ -1,4 +1,7 @@
 import { useState } from 'react'
+import { MapPin } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { passkeyLogin, registerPasskey, requestEmailCode, verifyEmailCode } from '../lib/auth'
 import { useT } from '../lib/i18n'
 
@@ -46,96 +49,95 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 
   return (
-    <div className="auth">
-      <h1>{t('app.name')}</h1>
+    <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center gap-4 p-6">
+      <h1 className="flex items-center gap-2 font-display text-3xl font-bold tracking-tight">
+        <MapPin className="size-7 text-primary" aria-hidden />
+        {t('app.name')}
+      </h1>
 
       {step === 'email' && (
         <>
-          <p className="hint">{t('auth.subtitle')}</p>
-          <p className="hint">{t('auth.optionalHint')}</p>
-          <label>
+          <p className="text-sm text-muted-foreground">{t('auth.subtitle')}</p>
+          <p className="text-sm text-muted-foreground">{t('auth.optionalHint')}</p>
+          <label className="flex flex-col gap-1.5 text-sm font-medium">
             {t('auth.emailLabel')}
-            <input
+            <Input
               type="email"
               autoComplete="email webauthn"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && emailValid && setStep('method')}
+              className="bg-card"
             />
           </label>
-          <button className="btn primary" disabled={!emailValid || busy} onClick={() => setStep('method')}>
+          <Button disabled={!emailValid || busy} onClick={() => setStep('method')}>
             {t('auth.continue')}
-          </button>
-          <button className="btn" disabled={busy} onClick={onCancel}>
+          </Button>
+          <Button variant="outline" disabled={busy} onClick={onCancel}>
             {t('auth.back')}
-          </button>
+          </Button>
         </>
       )}
 
       {step === 'method' && (
         <>
-          <p className="hint">{email}</p>
-          <button
-            className="btn primary"
+          <p className="text-sm text-muted-foreground">{email}</p>
+          <Button
             disabled={busy}
             onClick={() => run(() => passkeyLogin(email).then(onSignedIn), 'auth.error.noPasskey')}
           >
             {t('auth.usePasskey')}
-          </button>
-          <button className="btn" disabled={busy} onClick={() => void sendCode()}>
+          </Button>
+          <Button variant="outline" disabled={busy} onClick={() => void sendCode()}>
             {t('auth.sendCode')}
-          </button>
-          <button className="btn" disabled={busy} onClick={() => setStep('email')}>
+          </Button>
+          <Button variant="ghost" disabled={busy} onClick={() => setStep('email')}>
             {t('auth.back')}
-          </button>
+          </Button>
         </>
       )}
 
       {step === 'code' && (
         <>
-          <p className="hint">{t('auth.codeSent', { email })}</p>
-          <label>
+          <p className="text-sm text-muted-foreground">{t('auth.codeSent', { email })}</p>
+          <label className="flex flex-col gap-1.5 text-sm font-medium">
             {t('auth.codeLabel')}
-            <input
+            <Input
               inputMode="numeric"
               autoComplete="one-time-code"
               maxLength={6}
               value={code}
               onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+              className="bg-card text-center font-mono text-lg tracking-[0.4em]"
             />
           </label>
-          <button
-            className="btn primary"
+          <Button
             disabled={code.length !== 6 || busy}
             onClick={() =>
               run(() => verifyEmailCode(email, code).then(() => setStep('offerPasskey')), 'auth.error.badCode')
             }
           >
             {t('auth.verify')}
-          </button>
-          <button className="btn" disabled={busy} onClick={() => setStep('method')}>
+          </Button>
+          <Button variant="ghost" disabled={busy} onClick={() => setStep('method')}>
             {t('auth.back')}
-          </button>
+          </Button>
         </>
       )}
 
       {step === 'offerPasskey' && (
         <>
-          <p className="hint">{t('auth.passkeyOffer')}</p>
-          <button
-            className="btn primary"
-            disabled={busy}
-            onClick={() => run(() => registerPasskey().then(onSignedIn))}
-          >
+          <p className="text-sm text-muted-foreground">{t('auth.passkeyOffer')}</p>
+          <Button disabled={busy} onClick={() => run(() => registerPasskey().then(onSignedIn))}>
             {t('auth.createPasskey')}
-          </button>
-          <button className="btn" disabled={busy} onClick={onSignedIn}>
+          </Button>
+          <Button variant="outline" disabled={busy} onClick={onSignedIn}>
             {t('auth.skipPasskey')}
-          </button>
+          </Button>
         </>
       )}
 
-      {error && <p className="error">{error}</p>}
+      {error && <p className="text-sm text-destructive">{error}</p>}
     </div>
   )
 }

@@ -1,390 +1,116 @@
-/* GeoNotes design tokens and component styles.
-   Light theme is a warm "not white"; dark follows the system preference. */
+/* GeoNotes design system: Tailwind v4 + shadcn tokens.
+
+   Direction: "field atlas". Light theme is a pale sage map-paper (never
+   plain white); dark theme is a deep green-black night-navigation surface.
+   One accent (pine green) carries GPS state, distances and primary actions.
+   Geodata (coordinates, distances, accuracy) is always set in mono. */
+
+@import 'tailwindcss';
+
+/* Dark mode is driven by a `.dark` class on <html> (set by ThemeProvider),
+   not by the media query, so the in-app theme switch can override the OS. */
+@custom-variant dark (&:is(.dark *));
 
 :root {
-  --bg: #f4f2ee;
-  --bg-raised: #fbfaf7;
-  --text: #1f2328;
-  --text-dim: #6b7280;
-  --border: #e2ddd4;
-  --accent: #0f766e;
-  --accent-contrast: #ffffff;
-  --danger: #b91c1c;
-  --here: #0f766e1a;
-  --shadow: 0 1px 3px rgb(0 0 0 / 8%), 0 4px 14px rgb(0 0 0 / 6%);
-  --radius: 14px;
+  --radius: 0.75rem;
+
+  /* Sage map-paper light theme. */
+  --background: oklch(0.955 0.008 130);
+  --foreground: oklch(0.25 0.02 145);
+  --card: oklch(0.982 0.005 120);
+  --card-foreground: oklch(0.25 0.02 145);
+  --popover: oklch(0.982 0.005 120);
+  --popover-foreground: oklch(0.25 0.02 145);
+  --primary: oklch(0.47 0.09 155);
+  --primary-foreground: oklch(0.98 0.008 130);
+  --secondary: oklch(0.92 0.015 135);
+  --secondary-foreground: oklch(0.3 0.03 150);
+  --muted: oklch(0.925 0.01 130);
+  --muted-foreground: oklch(0.5 0.02 140);
+  --accent: oklch(0.92 0.03 150);
+  --accent-foreground: oklch(0.35 0.06 155);
+  --destructive: oklch(0.55 0.19 27);
+  --destructive-foreground: oklch(0.98 0.008 130);
+  --border: oklch(0.88 0.012 130);
+  --input: oklch(0.88 0.012 130);
+  --ring: oklch(0.47 0.09 155);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #16181d;
-    --bg-raised: #1f232b;
-    --text: #e7e9ee;
-    --text-dim: #9aa1ad;
-    --border: #2c313a;
-    --accent: #2dd4bf;
-    --accent-contrast: #06251f;
-    --danger: #f87171;
-    --here: #2dd4bf22;
-    --shadow: 0 1px 3px rgb(0 0 0 / 40%);
+.dark {
+  /* Night-navigation dark theme. */
+  --background: oklch(0.19 0.012 150);
+  --foreground: oklch(0.93 0.012 140);
+  --card: oklch(0.235 0.014 150);
+  --card-foreground: oklch(0.93 0.012 140);
+  --popover: oklch(0.235 0.014 150);
+  --popover-foreground: oklch(0.93 0.012 140);
+  --primary: oklch(0.78 0.1 155);
+  --primary-foreground: oklch(0.2 0.03 155);
+  --secondary: oklch(0.29 0.015 150);
+  --secondary-foreground: oklch(0.9 0.02 145);
+  --muted: oklch(0.27 0.014 150);
+  --muted-foreground: oklch(0.68 0.02 145);
+  --accent: oklch(0.3 0.03 155);
+  --accent-foreground: oklch(0.85 0.06 150);
+  --destructive: oklch(0.68 0.16 25);
+  --destructive-foreground: oklch(0.16 0.02 25);
+  --border: oklch(0.32 0.015 150);
+  --input: oklch(0.32 0.015 150);
+  --ring: oklch(0.78 0.1 155);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  /* Display face for the wordmark and headings; body stays on the system
+     stack so the offline app shell loads with zero font latency. */
+  --font-display: 'Bricolage Grotesque Variable', system-ui, sans-serif;
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, monospace;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
   }
-}
 
-* {
-  box-sizing: border-box;
-}
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
 
-html,
-body,
-#root {
-  height: 100%;
-}
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-size: 16px;
+    line-height: 1.5;
+  }
 
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  font-size: 16px;
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
-}
-
-.app {
-  max-width: 640px;
-  margin: 0 auto;
-  min-height: 100%;
-  display: flex;
-  flex-direction: column;
-  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
-    env(safe-area-inset-left);
-}
-
-/* --- Top bar --- */
-
-.topbar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 16px 10px;
-}
-
-.topbar h1 {
-  font-size: 20px;
-  font-weight: 700;
-  margin: 0;
-  flex: 1;
-}
-
-.status-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--accent);
-  flex: none;
-}
-
-.status-dot.offline {
-  background: var(--text-dim);
-}
-
-.status-dot.error {
-  background: var(--danger);
-}
-
-/* --- Accuracy badge --- */
-
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--text-dim);
-  background: var(--bg-raised);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 3px 10px;
-}
-
-.badge.locked {
-  color: var(--accent);
-  border-color: var(--accent);
-}
-
-/* --- Segmented control (Nearby | All) --- */
-
-.segmented {
-  display: flex;
-  margin: 10px 16px;
-  background: var(--bg-raised);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 3px;
-}
-
-.segmented button {
-  flex: 1;
-  border: 0;
-  background: transparent;
-  color: var(--text-dim);
-  font: inherit;
-  font-size: 14px;
-  padding: 6px 0;
-  border-radius: 999px;
-  cursor: pointer;
-}
-
-.segmented button.active {
-  background: var(--accent);
-  color: var(--accent-contrast);
-  font-weight: 600;
-}
-
-/* --- Notes list --- */
-
-.notes {
-  list-style: none;
-  margin: 0;
-  padding: 4px 16px 96px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.note-card {
-  background: var(--bg-raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 12px 14px;
-  cursor: pointer;
-  box-shadow: var(--shadow);
-}
-
-.note-card.here {
-  background: var(--here);
-  border-color: var(--accent);
-}
-
-.note-card p {
-  margin: 0 0 6px;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.note-card .meta {
-  display: flex;
-  gap: 8px;
-  font-size: 12.5px;
-  color: var(--text-dim);
-}
-
-.note-card .meta .distance {
-  color: var(--accent);
-  font-weight: 600;
-  flex: none;
-}
-
-.empty {
-  text-align: center;
-  color: var(--text-dim);
-  padding: 48px 24px;
-}
-
-/* --- Floating add button --- */
-
-.fab {
-  position: fixed;
-  right: max(20px, env(safe-area-inset-right));
-  bottom: max(20px, env(safe-area-inset-bottom));
-  width: 58px;
-  height: 58px;
-  border-radius: 50%;
-  border: 0;
-  background: var(--accent);
-  color: var(--accent-contrast);
-  font-size: 30px;
-  line-height: 1;
-  cursor: pointer;
-  box-shadow: var(--shadow);
-  transition: opacity 0.2s;
-}
-
-.fab:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-/* --- Buttons and inputs --- */
-
-.btn {
-  border: 1px solid var(--border);
-  background: var(--bg-raised);
-  color: var(--text);
-  font: inherit;
-  border-radius: 10px;
-  padding: 10px 16px;
-  cursor: pointer;
-}
-
-.btn.primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-contrast);
-  font-weight: 600;
-}
-
-.btn.danger {
-  color: var(--danger);
-  border-color: var(--danger);
-  background: transparent;
-}
-
-.btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-input[type='email'],
-input[type='text'],
-input[inputmode='numeric'],
-textarea {
-  width: 100%;
-  font: inherit;
-  color: var(--text);
-  background: var(--bg-raised);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 10px 12px;
-}
-
-textarea:focus,
-input:focus {
-  outline: 2px solid var(--accent);
-  outline-offset: -1px;
-}
-
-/* --- Editor screen --- */
-
-.editor {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 0 16px 24px;
-  flex: 1;
-}
-
-.editor textarea {
-  min-height: 160px;
-  resize: vertical;
-}
-
-.editor .location {
-  font-size: 13.5px;
-  color: var(--text-dim);
-}
-
-.counter {
-  font-size: 13px;
-  color: var(--text-dim);
-  text-align: right;
-}
-
-.counter.full {
-  color: var(--danger);
-  font-weight: 600;
-}
-
-.editor .actions {
-  display: flex;
-  gap: 10px;
-  justify-content: flex-end;
-}
-
-.preview {
-  border: 1px dashed var(--border);
-  border-radius: 10px;
-  padding: 10px 12px;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  color: var(--text-dim);
-}
-
-/* --- Auth screen --- */
-
-.auth {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 14px;
-  padding: 24px;
-  max-width: 400px;
-  margin: 0 auto;
-  width: 100%;
-}
-
-.auth h1 {
-  margin: 0;
-}
-
-.auth .hint {
-  color: var(--text-dim);
-  margin: 0;
-}
-
-.auth .error {
-  color: var(--danger);
-  margin: 0;
-  font-size: 14px;
-}
-
-/* --- Misc --- */
-
-.notice {
-  margin: 10px 16px 0;
-  padding: 8px 12px;
-  border-radius: 10px;
-  background: var(--bg-raised);
-  border: 1px solid var(--border);
-  color: var(--text-dim);
-  font-size: 13.5px;
-}
-
-.attribution {
-  text-align: center;
-  font-size: 11.5px;
-  color: var(--text-dim);
-  padding: 8px 16px calc(8px + env(safe-area-inset-bottom));
-  margin-top: auto;
-}
-
-/* --- Delete confirmation dialog (custom, not window.confirm) --- */
-
-.dialog-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgb(0 0 0 / 45%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  z-index: 10;
-}
-
-.dialog {
-  background: var(--bg-raised);
-  border-radius: var(--radius);
-  padding: 20px;
-  max-width: 360px;
-  width: 100%;
-  box-shadow: var(--shadow);
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.dialog .actions {
-  display: flex;
-  gap: 10px;
-  justify-content: flex-end;
+  /* Geodata is an instrument readout: mono with lining tabular figures. */
+  .font-mono {
+    font-variant-numeric: tabular-nums;
+  }
 }

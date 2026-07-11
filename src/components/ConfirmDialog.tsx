@@ -1,14 +1,16 @@
 import type { ReactNode } from 'react'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogFooter, DialogTitle } from '@/components/ui/dialog'
 
 /**
- * Minimal modal confirmation dialog (window.confirm is unavailable in some
- * webviews and blocks the thread).
+ * Modal confirmation dialog for destructive actions, built on the shadcn
+ * Dialog (focus trap, Escape and backdrop dismissal included).
  *
  * @param message - the question to show.
  * @param confirmLabel - label of the destructive confirm button.
  * @param cancelLabel - label of the cancel button.
  * @param onConfirm - called when the user confirms.
- * @param onCancel - called when the user cancels or taps the backdrop.
+ * @param onCancel - called when the user cancels, presses Escape or taps the backdrop.
  */
 export function ConfirmDialog({
   message,
@@ -24,18 +26,18 @@ export function ConfirmDialog({
   onCancel: () => void
 }) {
   return (
-    <div className="dialog-backdrop" onClick={onCancel}>
-      <div className="dialog" onClick={(e) => e.stopPropagation()}>
-        <p style={{ margin: 0 }}>{message}</p>
-        <div className="actions">
-          <button className="btn" onClick={onCancel}>
+    <Dialog open onOpenChange={(open) => !open && onCancel()}>
+      <DialogContent className="max-w-sm rounded-xl" showCloseButton={false}>
+        <DialogTitle className="text-base leading-snug font-medium">{message}</DialogTitle>
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel}>
             {cancelLabel}
-          </button>
-          <button className="btn danger" onClick={onConfirm}>
+          </Button>
+          <Button variant="destructive" onClick={onConfirm}>
             {confirmLabel}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
