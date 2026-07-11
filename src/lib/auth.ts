@@ -69,9 +69,14 @@ export async function registerPasskey(): Promise<void> {
 
 /**
  * Signs out: revokes the server session and wipes all local data (notes,
- * outbox, cursor), since the device may change hands.
+ * outbox, cursor), since the device may change hands. The app then returns
+ * to its optional local-only mode with an empty device.
  */
 export async function signOut(): Promise<void> {
+  // Final flush so unsynced changes reach the account before the wipe below.
+  // syncNow never throws; when offline it returns immediately and any notes
+  // still pending are lost with the wipe, which the sign-out dialog warns about.
+  await syncNow()
   // Best-effort revocation; local sign-out proceeds even when offline.
   await apiFetch('/api/auth/logout', {}).catch(() => {})
   await db.transaction('rw', db.notes, db.outbox, db.kv, async () => {

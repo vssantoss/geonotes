@@ -1,7 +1,8 @@
 {
   "app.name": "GeoNotes",
-  "auth.title": "Entrar",
+  "auth.signIn": "Entrar",
   "auth.subtitle": "Sem senhas. Use uma chave de acesso ou um código enviado ao seu e-mail.",
+  "auth.optionalHint": "Opcional: entre para fazer backup das suas notas e usá-las em outros dispositivos. Sem conta, as notas ficam apenas neste dispositivo.",
   "auth.emailLabel": "Endereço de e-mail",
   "auth.continue": "Continuar",
   "auth.usePasskey": "Entrar com chave de acesso",
@@ -17,6 +18,8 @@
   "auth.error.badCode": "O código não é válido ou expirou.",
   "auth.error.noPasskey": "Falha na chave de acesso. Tente um código por e-mail.",
   "auth.signOut": "Sair",
+  "auth.signOutConfirm": "Sair? As notas serão removidas deste dispositivo, mas continuam na sua conta.",
+  "auth.sessionExpired": "Sua sessão expirou. Entre novamente para continuar sincronizando.",
   "gps.acquiring": "Obtendo sua localização…",
   "gps.accuracy": "±{m} m",
   "gps.locked": "Localização fixada",

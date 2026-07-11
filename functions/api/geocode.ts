@@ -1,10 +1,11 @@
 import { json, HttpError, route } from '../_lib/http'
-import { requireUser } from '../_lib/session'
 import type { Env } from '../_lib/env'
 
 // Reverse-geocoding proxy for Nominatim (OpenStreetMap).
-// Proxying keeps the strict usage policy manageable: a proper User-Agent,
-// results cached at the edge, and only authenticated app users can call it.
+// Proxying keeps the strict usage policy manageable: a proper User-Agent and
+// results cached at the edge. The endpoint is public because signing in is
+// optional and local-only users still get addresses; the coordinate-rounded
+// cache keeps upstream traffic within Nominatim's 1 req/s policy.
 // The UI shows the required "© OpenStreetMap contributors" attribution.
 
 /** Cached addresses stay valid this long (addresses rarely change). */
@@ -14,8 +15,7 @@ const CACHE_TTL_SECONDS = 30 * 24 * 60 * 60
  * GET /api/geocode?lat=..&lng=..: resolves coordinates to a short
  * human-readable address via Nominatim.
  */
-export const onRequestGet = route<Env>(async ({ env, request }) => {
-  await requireUser(env, request)
+export const onRequestGet = route<Env>(async ({ request }) => {
   const url = new URL(request.url)
   const lat = Number(url.searchParams.get('lat'))
   const lng = Number(url.searchParams.get('lng'))

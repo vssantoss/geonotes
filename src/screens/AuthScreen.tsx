@@ -7,10 +7,13 @@ type Step = 'email' | 'method' | 'code' | 'offerPasskey'
 /**
  * Passwordless sign-in flow: e-mail first, then either a passkey ceremony or
  * a 6-digit e-mailed code, followed by an optional passkey enrollment offer.
+ * Signing in is optional (the app is fully usable local-only), so the flow
+ * can always be left without authenticating.
  *
  * @param onSignedIn - called once a session is established.
+ * @param onCancel - called when the user leaves without signing in.
  */
-export function AuthScreen({ onSignedIn }: { onSignedIn: () => void }) {
+export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; onCancel: () => void }) {
   const t = useT()
   const [step, setStep] = useState<Step>('email')
   const [email, setEmail] = useState('')
@@ -49,6 +52,7 @@ export function AuthScreen({ onSignedIn }: { onSignedIn: () => void }) {
       {step === 'email' && (
         <>
           <p className="hint">{t('auth.subtitle')}</p>
+          <p className="hint">{t('auth.optionalHint')}</p>
           <label>
             {t('auth.emailLabel')}
             <input
@@ -61,6 +65,9 @@ export function AuthScreen({ onSignedIn }: { onSignedIn: () => void }) {
           </label>
           <button className="btn primary" disabled={!emailValid || busy} onClick={() => setStep('method')}>
             {t('auth.continue')}
+          </button>
+          <button className="btn" disabled={busy} onClick={onCancel}>
+            {t('auth.back')}
           </button>
         </>
       )}

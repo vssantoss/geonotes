@@ -12,7 +12,7 @@ Offline-first PWA for short formatted notes tied to precise physical locations. 
 
 - Deletes are hard deletes. There is no trash and no recovery.
 
-- Auth is email plus passkey, zero passwords. First sign-in uses a 6-digit email code (sign-up is implicit), after which the app offers passkey enrollment.
+- Signing in is optional. Without an account the app opens straight on the main screen and keeps every note on the device only. Auth is email plus passkey, zero passwords: first sign-in uses a 6-digit email code (sign-up is implicit), after which the app offers passkey enrollment. Notes created before signing in upload automatically on first sign-in; signing out removes notes from the device but keeps them in the account.
 
 - Fully offline capable: read, create, edit and delete notes offline; changes sync automatically on reconnect. Reverse-geocoded addresses (Nominatim) are backfilled during sync for notes created offline.
 

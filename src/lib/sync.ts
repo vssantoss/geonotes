@@ -62,14 +62,16 @@ export async function syncNow(): Promise<void> {
   running = true
   setStatus('syncing')
   try {
-    // A session is required to talk to the API; without one the app simply
-    // stays local-only until the user signs in.
+    // Addresses matter even without an account (the geocode proxy is public),
+    // so the backfill runs before the session gate.
+    await backfillAddresses()
+
+    // A session is required for push/pull; without one the app simply stays
+    // local-only, mutations accumulating in the outbox until a sign-in.
     if ((await kvGet(KV.sessionToken)) === null) {
       setStatus('idle')
       return
     }
-
-    await backfillAddresses()
 
     const entries = await db.outbox.orderBy('queuedAt').toArray()
     const ops: SyncOp[] = []

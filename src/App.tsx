@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, KV } from './lib/db'
 import { signOut } from './lib/auth'
@@ -8,38 +8,33 @@ import { useT } from './lib/i18n'
 import { MainScreen } from './screens/MainScreen'
 import { EditorScreen, type EditorTarget } from './screens/EditorScreen'
 import { AuthScreen } from './screens/AuthScreen'
+import { ConfirmDialog } from './components/ConfirmDialog'
 
 /**
- * App shell: gates on authentication, then routes between the main screen
- * and the editor with plain state (no router needed for two screens).
+ * App shell: routes between the main screen, the editor and the optional
+ * sign-in flow with plain state (no router needed for three screens).
+ *
+ * Signing in is optional. Without a session the app opens straight on the
+ * main screen and keeps every note on this device only; signing in later
+ * uploads those notes (they wait in the outbox) and enables cross-device sync.
  */
 export default function App() {
   const t = useT()
   const online = useOnline()
   const syncStatus = useSyncStatus()
   const [editing, setEditing] = useState<EditorTarget | null>(null)
+  const [showAuth, setShowAuth] = useState(false)
+  const [confirmSignOut, setConfirmSignOut] = useState(false)
   // undefined = still reading IndexedDB, null = signed out. Absent rows must
   // map to null because Dexie resolves get() misses with undefined, which
-  // would be indistinguishable from the loading sentinel and blank the app.
+  // would be indistinguishable from the loading sentinel.
   const token = useLiveQuery(async () => (await db.kv.get(KV.sessionToken)) ?? null, [], undefined)
+  const signedIn = token !== undefined && token !== null
 
-  // The auth flow continues past token issuance (passkey enrollment offer),
-  // so the gate is explicit completion, not mere token presence. null means
-  // "not initialized yet"; a session existing at launch skips the flow.
-  const [authDone, setAuthDone] = useState<boolean | null>(null)
-  useEffect(() => {
-    if (token === undefined) return
-    if (authDone === null) setAuthDone(!!token)
-    else if (!token && authDone) setAuthDone(false) // signed out: gate again
-  }, [token, authDone])
-
-  // Wait for the session read to avoid a sign-in flash on every launch.
-  if (token === undefined || authDone === null) return null
-
-  if (!authDone) {
+  if (showAuth) {
     return (
       <div className="app">
-        <AuthScreen onSignedIn={() => setAuthDone(true)} />
+        <AuthScreen onSignedIn={() => setShowAuth(false)} onCancel={() => setShowAuth(false)} />
       </div>
     )
   }
@@ -48,21 +43,32 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <h1>{t('app.name')}</h1>
-        <span
-          className={`status-dot ${!online ? 'offline' : syncStatus === 'error' ? 'error' : ''}`}
-          title={!online ? t('sync.offline') : syncStatus === 'syncing' ? t('sync.syncing') : ''}
-        />
-        <button className="btn" onClick={() => void signOut()}>
-          {t('auth.signOut')}
-        </button>
+        {/* Sync indicator only makes sense with an account to sync against. */}
+        {signedIn && (
+          <span
+            className={`status-dot ${!online ? 'offline' : syncStatus === 'error' ? 'error' : ''}`}
+            title={!online ? t('sync.offline') : syncStatus === 'syncing' ? t('sync.syncing') : ''}
+          />
+        )}
+        {/* Hidden until the session read settles so the label never flips. */}
+        {token !== undefined && (
+          <button
+            className="btn"
+            onClick={() => (signedIn ? setConfirmSignOut(true) : setShowAuth(true))}
+          >
+            {t(signedIn ? 'auth.signOut' : 'auth.signIn')}
+          </button>
+        )}
       </header>
 
-      {!online && <div className="notice">{t('sync.offline')}</div>}
-      {syncStatus === 'unauthorized' && (
+      {/* Offline is the normal state without an account; only warn about
+          pending sync when there is an account to sync with. */}
+      {!online && signedIn && <div className="notice">{t('sync.offline')}</div>}
+      {syncStatus === 'unauthorized' && signedIn && (
         <div className="notice">
-          {t('auth.error.generic')}{' '}
-          <button className="btn" onClick={() => void signOut()}>
-            {t('auth.title')}
+          {t('auth.sessionExpired')}{' '}
+          <button className="btn" onClick={() => setShowAuth(true)}>
+            {t('auth.signIn')}
           </button>
         </div>
       )}
@@ -77,6 +83,19 @@ export default function App() {
       )}
 
       <footer className="attribution">{t('attribution.osm')}</footer>
+
+      {confirmSignOut && (
+        <ConfirmDialog
+          message={t('auth.signOutConfirm')}
+          confirmLabel={t('auth.signOut')}
+          cancelLabel={t('editor.cancel')}
+          onConfirm={() => {
+            setConfirmSignOut(false)
+            void signOut()
+          }}
+          onCancel={() => setConfirmSignOut(false)}
+        />
+      )}
     </div>
   )
 }
