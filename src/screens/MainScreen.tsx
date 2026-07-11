@@ -55,20 +55,7 @@ export function MainScreen({
 
   return (
     <>
-      <div className="px-4 pt-1">
-        <AccuracyBadge fix={fix} locked={locked} />
-      </div>
-
-      {error && (
-        <Notice>
-          {t(error === 'denied' ? 'gps.denied' : 'gps.unavailable')}
-          <Button variant="outline" size="xs" onClick={retry}>
-            {t('gps.retry')}
-          </Button>
-        </Notice>
-      )}
-
-      <div className="mx-4 my-3 grid grid-cols-2 gap-1 rounded-full bg-muted p-1" role="tablist">
+      <div className="mx-4 mt-2 mb-3 grid grid-cols-2 gap-1 rounded-full bg-muted p-1" role="tablist">
         {(['nearby', 'all'] as const).map((mode) => (
           <button
             key={mode}
@@ -87,6 +74,15 @@ export function MainScreen({
           </button>
         ))}
       </div>
+
+      {error && (
+        <Notice>
+          {t(error === 'denied' ? 'gps.denied' : 'gps.unavailable')}
+          <Button variant="outline" size="xs" onClick={retry}>
+            {t('gps.retry')}
+          </Button>
+        </Notice>
+      )}
 
       {shown.length === 0 ? (
         <EmptyState
@@ -108,21 +104,25 @@ export function MainScreen({
         </ul>
       )}
 
-      <button
-        aria-label={t('main.addNote')}
-        title={locked ? t('main.addNote') : t('gps.waitingToAdd')}
-        disabled={!locked}
-        onClick={() => locked && onAdd(locked)}
-        className={cn(
-          'fixed right-[max(1.25rem,env(safe-area-inset-right))] bottom-[max(1.25rem,env(safe-area-inset-bottom))] z-10',
-          'flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground',
-          'shadow-lg shadow-primary/25 transition-all active:scale-95',
-          'focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none',
-          'disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100',
-        )}
-      >
-        <Plus className="size-7" aria-hidden />
-      </button>
+      {/* GPS chip rides with the + button: it explains why + is disabled
+          while acquiring and confirms the accuracy once locked. */}
+      <div className="fixed right-[max(1.25rem,env(safe-area-inset-right))] bottom-[max(1.25rem,env(safe-area-inset-bottom))] z-10 flex items-center gap-2.5">
+        <AccuracyBadge fix={fix} locked={locked} />
+        <button
+          aria-label={t('main.addNote')}
+          title={locked ? t('main.addNote') : t('gps.waitingToAdd')}
+          disabled={!locked}
+          onClick={() => locked && onAdd(locked)}
+          className={cn(
+            'flex size-14 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground',
+            'shadow-lg shadow-primary/25 transition-all active:scale-95',
+            'focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none',
+            'disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100',
+          )}
+        >
+          <Plus className="size-7" aria-hidden />
+        </button>
+      </div>
     </>
   )
 }
