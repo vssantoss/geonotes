@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { INITIAL_LOCK_STATE, reduceFix, reduceGraceExpired } from '../lockMachine'
-import { LOCK_GRACE_MS, type GeoFix } from '../geo'
+import {
+  INITIAL_LOCK_STATE,
+  readyFix,
+  reduceFix,
+  reduceRefineExpired,
+} from '../lockMachine'
+import { REFINE_MS, type GeoFix } from '../geo'
 
 /** Builds a fix with the given accuracy. */
 function fix(accuracy: number, timestamp = 0): GeoFix {
@@ -8,46 +13,52 @@ function fix(accuracy: number, timestamp = 0): GeoFix {
 }
 
 describe('lock machine', () => {
-  it('locks immediately at ideal accuracy (<= 10 m)', () => {
-    const s = reduceFix(INITIAL_LOCK_STATE, fix(8), 1000)
-    expect(s.locked).toEqual(fix(8))
-  })
-
-  it('does not lock on a coarse fix (> 50 m)', () => {
+  it('is not ready and arms nothing on a coarse fix (> 30 m)', () => {
     const s = reduceFix(INITIAL_LOCK_STATE, fix(80), 1000)
     expect(s.locked).toBeNull()
-    expect(s.graceDeadline).toBeNull()
+    expect(s.refineDeadline).toBeNull()
+    expect(readyFix(s)).toBeNull()
   })
 
-  it('arms the 5 s grace timer once an acceptable fix (<= 50 m) arrives', () => {
+  it('becomes ready and arms the 10 s refinement window at <= 30 m', () => {
     const s = reduceFix(INITIAL_LOCK_STATE, fix(30), 1000)
     expect(s.locked).toBeNull()
-    expect(s.graceDeadline).toBe(1000 + LOCK_GRACE_MS)
+    expect(s.refineDeadline).toBe(1000 + REFINE_MS)
+    expect(readyFix(s)).toEqual(fix(30))
   })
 
-  it('locks with the best fix when the grace timer expires', () => {
-    let s = reduceFix(INITIAL_LOCK_STATE, fix(40), 1000)
-    s = reduceFix(s, fix(25), 2000)
-    s = reduceGraceExpired(s)
-    expect(s.locked).toEqual(fix(25))
+  it('does not lock immediately even on a very accurate fix', () => {
+    const s = reduceFix(INITIAL_LOCK_STATE, fix(5), 1000)
+    expect(s.locked).toBeNull()
+    expect(s.refineDeadline).toBe(1000 + REFINE_MS)
   })
 
-  it('does not re-arm the grace timer on later acceptable fixes', () => {
-    let s = reduceFix(INITIAL_LOCK_STATE, fix(45), 1000)
-    s = reduceFix(s, fix(35), 3000)
-    expect(s.graceDeadline).toBe(1000 + LOCK_GRACE_MS)
+  it('locks with the best fix when the refinement window expires', () => {
+    let s = reduceFix(INITIAL_LOCK_STATE, fix(25), 1000)
+    s = reduceFix(s, fix(12), 2000)
+    s = reduceRefineExpired(s)
+    expect(s.locked).toEqual(fix(12))
   })
 
-  it('ideal fix during the grace period locks without waiting', () => {
-    let s = reduceFix(INITIAL_LOCK_STATE, fix(30), 1000)
-    s = reduceFix(s, fix(9), 2000)
-    expect(s.locked).toEqual(fix(9))
+  it('keeps the deadline on later fixes that stay within 30 m', () => {
+    let s = reduceFix(INITIAL_LOCK_STATE, fix(28), 1000)
+    s = reduceFix(s, fix(20), 3000)
+    expect(s.refineDeadline).toBe(1000 + REFINE_MS)
+  })
+
+  it('resets the deadline when a fix regresses past 30 m', () => {
+    let s = reduceFix(INITIAL_LOCK_STATE, fix(25), 1000)
+    s = reduceFix(s, fix(60), 4000)
+    expect(s.refineDeadline).toBe(4000 + REFINE_MS)
+    // Still ready: the best fix within 30 m is kept.
+    expect(readyFix(s)).toEqual(fix(25))
+    expect(s.locked).toBeNull()
   })
 
   it('locks via deadline check when fixes arrive after the deadline passed', () => {
-    let s = reduceFix(INITIAL_LOCK_STATE, fix(30), 1000)
-    s = reduceFix(s, fix(28), 1000 + LOCK_GRACE_MS + 500)
-    expect(s.locked).toEqual(fix(28))
+    let s = reduceFix(INITIAL_LOCK_STATE, fix(25), 1000)
+    s = reduceFix(s, fix(22), 1000 + REFINE_MS + 500)
+    expect(s.locked).toEqual(fix(22))
   })
 
   it('keeps the newer fix on an accuracy tie so the lock is fresh', () => {
@@ -56,16 +67,23 @@ describe('lock machine', () => {
     expect(s.best).toEqual(fix(30, 2))
   })
 
-  it('grace expiry without any acceptable fix stays unlocked', () => {
+  it('refine expiry without any ready fix stays unlocked', () => {
     let s = reduceFix(INITIAL_LOCK_STATE, fix(120), 1000)
-    s = reduceGraceExpired(s)
+    s = reduceRefineExpired(s)
     expect(s.locked).toBeNull()
   })
 
   it('is inert once locked', () => {
-    let s = reduceFix(INITIAL_LOCK_STATE, fix(5), 1000)
+    let s = reduceFix(INITIAL_LOCK_STATE, fix(25), 1000)
+    s = reduceRefineExpired(s)
     const locked = s.locked
-    s = reduceFix(s, fix(3), 2000)
+    s = reduceFix(s, fix(3), 20000)
     expect(s.locked).toBe(locked)
+  })
+
+  it('readyFix returns the locked fix after locking', () => {
+    let s = reduceFix(INITIAL_LOCK_STATE, fix(25), 1000)
+    s = reduceRefineExpired(s)
+    expect(readyFix(s)).toEqual(fix(25))
   })
 })

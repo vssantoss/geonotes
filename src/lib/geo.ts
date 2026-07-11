@@ -12,12 +12,10 @@ export interface GeoFix {
   timestamp: number
 }
 
-/** Accuracy (m) at which the fix locks immediately. */
-export const ACCURACY_IDEAL_M = 10
-/** Accuracy (m) considered acceptable after the grace period. */
-export const ACCURACY_ACCEPTABLE_M = 50
-/** How long (ms) to keep trying for an ideal fix once an acceptable one exists. */
-export const LOCK_GRACE_MS = 5000
+/** Accuracy (m) at which the fix is good enough to add a note. */
+export const ACCURACY_READY_M = 30
+/** How long (ms) to keep refining after a ready fix before locking. */
+export const REFINE_MS = 10000
 /** Minimum radius (m) within which a note counts as "at your location". */
 export const NEARBY_MIN_RADIUS_M = 25
 

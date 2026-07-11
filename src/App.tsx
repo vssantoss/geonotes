@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { db, KV } from './lib/db'
 import { signOut } from './lib/auth'
+import { useGeolocation } from './hooks/useGeolocation'
 import { useOnline } from './hooks/useOnline'
 import { useSyncStatus } from './hooks/useSyncStatus'
 import { useT } from './lib/i18n'
@@ -29,6 +30,9 @@ export default function App() {
   const syncStatus = useSyncStatus()
   const [editing, setEditing] = useState<EditorTarget | null>(null)
   const [showAuth, setShowAuth] = useState(false)
+  // Lives in the shell (not MainScreen) so the GPS watch keeps refining the
+  // location while a new note is being written during the refinement window.
+  const geo = useGeolocation(editing === null && !showAuth)
   const [confirmSignOut, setConfirmSignOut] = useState(false)
   // undefined = still reading IndexedDB, null = signed out. Absent rows must
   // map to null because Dexie resolves get() misses with undefined, which
@@ -87,10 +91,11 @@ export default function App() {
       )}
 
       {editing ? (
-        <EditorScreen target={editing} onDone={() => setEditing(null)} />
+        <EditorScreen target={editing} geo={geo} onDone={() => setEditing(null)} />
       ) : (
         <MainScreen
-          onAdd={(locked) => setEditing({ kind: 'new', location: locked })}
+          geo={geo}
+          onAdd={(location) => setEditing({ kind: 'new', location })}
           onOpen={(note) => setEditing({ kind: 'edit', note })}
         />
       )}

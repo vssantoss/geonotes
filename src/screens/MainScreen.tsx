@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { db } from '../lib/db'
 import { distanceMeters, nearbyRadiusMeters, type GeoFix } from '../lib/geo'
-import { useGeolocation } from '../hooks/useGeolocation'
+import type { GeolocationState } from '../hooks/useGeolocation'
 import { useT } from '../lib/i18n'
 import { AccuracyBadge } from '../components/AccuracyBadge'
 import { NoteCard } from '../components/NoteCard'
@@ -20,24 +20,28 @@ type ViewMode = 'nearby' | 'all'
  * exists, every note before that) and the floating + button that unlocks
  * when the GPS fix is precise enough.
  *
- * @param onAdd - called with the locked fix when the user taps +.
+ * @param geo - geolocation state owned by the app shell.
+ * @param onAdd - called with the current fix when the user taps +; the fix
+ *   may still refine in the editor until the lock lands.
  * @param onOpen - called with a note when the user taps it.
  */
 export function MainScreen({
+  geo,
   onAdd,
   onOpen,
 }: {
-  onAdd: (locked: GeoFix) => void
+  geo: GeolocationState
+  onAdd: (location: GeoFix) => void
   onOpen: (note: Note) => void
 }) {
   const t = useT()
-  const { fix, locked, error, retry } = useGeolocation()
+  const { fix, location, locked, error, retry } = geo
   const [view, setView] = useState<ViewMode>('nearby')
   const notes = useLiveQuery(() => db.notes.orderBy('updatedAt').reverse().toArray(), [], [])
 
   // Before any fix arrives the app lists everything (spec: list all notes
   // and start filtering while the GPS signal is being acquired).
-  const reference = locked ?? fix
+  const reference = location ?? fix
   const radius = reference ? nearbyRadiusMeters(reference.accuracy) : null
 
   const decorated = notes.map((note) => {
@@ -105,14 +109,14 @@ export function MainScreen({
       )}
 
       {/* GPS chip rides with the + button: it explains why + is disabled
-          while acquiring and confirms the accuracy once locked. */}
+          while acquiring and confirms the accuracy once ready or locked. */}
       <div className="fixed right-[max(1.25rem,env(safe-area-inset-right))] bottom-[max(1.25rem,env(safe-area-inset-bottom))] z-10 flex items-center gap-2.5">
-        <AccuracyBadge fix={fix} locked={locked} />
+        <AccuracyBadge fix={fix} location={location} locked={locked} />
         <button
           aria-label={t('main.addNote')}
-          title={locked ? t('main.addNote') : t('gps.waitingToAdd')}
-          disabled={!locked}
-          onClick={() => locked && onAdd(locked)}
+          title={location ? t('main.addNote') : t('gps.waitingToAdd')}
+          disabled={!location}
+          onClick={() => location && onAdd(location)}
           className={cn(
             'flex size-14 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground',
             'shadow-lg shadow-primary/25 transition-all active:scale-95',

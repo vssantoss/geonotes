@@ -1,25 +1,25 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { watchPosition, LOCK_GRACE_MS, type GeoFix } from '../lib/geo'
+import { watchPosition, type GeoFix } from '../lib/geo'
 import {
   INITIAL_LOCK_STATE,
+  readyFix,
   reduceFix,
-  reduceGraceExpired,
+  reduceRefineExpired,
   type LockState,
 } from '../lib/lockMachine'
 
-/** How long a lock stays reusable after GPS was killed, so returning from the
-    editor does not force a full re-acquisition. */
-const LOCK_REUSE_MS = 60000
-
-// Module-level cache: survives MainScreen unmount/remount (editor round trips).
-let cachedLock: { fix: GeoFix; at: number } | null = null
+/** How long a lock stays reusable; older locks are re-acquired when the main
+    screen regains focus. */
+const LOCK_REUSE_MS = 10000
 
 /** What the UI needs to render location state. */
 export interface GeolocationState {
   /** Latest raw fix, for the live accuracy badge. */
   fix: GeoFix | null
-  /** The locked fix once acquired; GPS is already off at that point. */
-  locked: GeoFix | null
+  /** The fix a new note would use: ready (still refining) or locked. */
+  location: GeoFix | null
+  /** True once refinement finished; GPS is already off at that point. */
+  locked: boolean
   /** Permission or availability error, or null. */
   error: 'denied' | 'unavailable' | null
   /** Restarts acquisition after an error or a stale lock. */
@@ -27,43 +27,54 @@ export interface GeolocationState {
 }
 
 /**
- * Acquires the device location with the lock rules from lockMachine and
- * kills GPS polling the moment a fix is accepted.
+ * Acquires the device location with the rules from lockMachine and kills GPS
+ * polling once the refinement window ends. Mount it once in the app shell:
+ * the watch then keeps refining while the note editor is open, so a note
+ * started during the refinement window sees live location updates.
  *
- * @returns the current geolocation state for the main screen.
+ * @param active - whether the main screen is the focused screen; controls
+ *   the re-acquisition on window focus/visibility with a stale lock.
+ * @returns the current geolocation state.
  */
-export function useGeolocation(): GeolocationState {
-  const [fix, setFix] = useState<GeoFix | null>(cachedLock?.fix ?? null)
-  const [locked, setLocked] = useState<GeoFix | null>(
-    cachedLock && Date.now() - cachedLock.at < LOCK_REUSE_MS ? cachedLock.fix : null,
-  )
+export function useGeolocation(active: boolean): GeolocationState {
+  const [state, setState] = useState<LockState>(INITIAL_LOCK_STATE)
+  const [fix, setFix] = useState<GeoFix | null>(null)
   const [error, setError] = useState<'denied' | 'unavailable' | null>(null)
   const [attempt, setAttempt] = useState(0)
   const stateRef = useRef<LockState>(INITIAL_LOCK_STATE)
+  // Epoch ms of the current lock, for the staleness check on refocus.
+  const lockedAtRef = useRef<number | null>(null)
 
   const retry = useCallback(() => {
-    cachedLock = null
-    setLocked(null)
+    stateRef.current = INITIAL_LOCK_STATE
+    lockedAtRef.current = null
+    setState(INITIAL_LOCK_STATE)
     setError(null)
     setAttempt((n) => n + 1)
   }, [])
 
   useEffect(() => {
-    // A fresh cached lock means GPS was already acquired and killed; do not
-    // restart polling just because the screen remounted.
-    if (locked) return
-
-    stateRef.current = INITIAL_LOCK_STATE
-    let graceTimer: ReturnType<typeof setTimeout> | null = null
+    let refineTimer: ReturnType<typeof setTimeout> | null = null
     let stopped = false
 
-    /** Accepts a lock: records it, stops GPS and cancels the grace timer. */
-    const accept = (accepted: GeoFix) => {
-      cachedLock = { fix: accepted, at: Date.now() }
-      setLocked(accepted)
-      if (graceTimer) clearTimeout(graceTimer)
-      stop()
-      stopped = true
+    /** Publishes a machine state; on lock, stops GPS and the timer. */
+    const commit = (next: LockState) => {
+      stateRef.current = next
+      setState(next)
+      if (next.locked) {
+        lockedAtRef.current = Date.now()
+        if (refineTimer) clearTimeout(refineTimer)
+        stop()
+        stopped = true
+      }
+    }
+
+    /** (Re)schedules the real-time mirror of the machine's refine deadline. */
+    const armTimer = (deadline: number) => {
+      if (refineTimer) clearTimeout(refineTimer)
+      refineTimer = setTimeout(() => {
+        commit(reduceRefineExpired(stateRef.current))
+      }, Math.max(0, deadline - Date.now()))
     }
 
     const stop = watchPosition(
@@ -73,19 +84,12 @@ export function useGeolocation(): GeolocationState {
         setError(null)
         const prev = stateRef.current
         const next = reduceFix(prev, newFix, Date.now())
-        stateRef.current = next
-        if (next.locked) {
-          accept(next.locked)
-          return
+        // The deadline moved (armed on readiness, or reset by a fix that
+        // regressed past 30 m): keep the wall-clock timer in sync.
+        if (!next.locked && next.refineDeadline !== null && next.refineDeadline !== prev.refineDeadline) {
+          armTimer(next.refineDeadline)
         }
-        // The machine armed the grace timer on this fix: mirror it in real time.
-        if (next.graceDeadline !== null && prev.graceDeadline === null) {
-          graceTimer = setTimeout(() => {
-            const after = reduceGraceExpired(stateRef.current)
-            stateRef.current = after
-            if (after.locked) accept(after.locked)
-          }, LOCK_GRACE_MS)
-        }
+        commit(next)
       },
       (code) => {
         if (stopped) return
@@ -96,10 +100,31 @@ export function useGeolocation(): GeolocationState {
     return () => {
       stopped = true
       stop()
-      if (graceTimer) clearTimeout(graceTimer)
+      if (refineTimer) clearTimeout(refineTimer)
     }
-    // `attempt` re-runs acquisition on retry(); `locked` stops it once accepted.
-  }, [attempt, locked])
+    // `attempt` re-runs acquisition on retry() and on stale-lock refocus.
+  }, [attempt])
 
-  return { fix, locked, error, retry }
+  useEffect(() => {
+    if (!active) return
+
+    /** Re-acquires when the main screen surfaces with a lock past its
+        reuse window; a running acquisition is left alone. */
+    const maybeRestart = () => {
+      if (document.visibilityState !== 'visible') return
+      const lockedAt = lockedAtRef.current
+      if (lockedAt !== null && Date.now() - lockedAt > LOCK_REUSE_MS) retry()
+    }
+
+    // Becoming active (e.g. returning from the editor) counts as focus.
+    maybeRestart()
+    window.addEventListener('focus', maybeRestart)
+    document.addEventListener('visibilitychange', maybeRestart)
+    return () => {
+      window.removeEventListener('focus', maybeRestart)
+      document.removeEventListener('visibilitychange', maybeRestart)
+    }
+  }, [active, retry])
+
+  return { fix, location: readyFix(state), locked: state.locked !== null, error, retry }
 }

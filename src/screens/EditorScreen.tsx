@@ -9,21 +9,33 @@ import { useT } from '../lib/i18n'
 import { useOnline } from '../hooks/useOnline'
 import { CharCounter } from '../components/CharCounter'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import type { GeolocationState } from '../hooks/useGeolocation'
 import type { GeoFix } from '../lib/geo'
 import { NOTE_MAX_LENGTH, type Note } from '../../shared/types'
 
-/** Editor target: an existing note, or a new one at a locked location. */
+/** Editor target: an existing note, or a new one at the fix + was tapped on. */
 export type EditorTarget = { kind: 'edit'; note: Note } | { kind: 'new'; location: GeoFix }
 
 /**
- * Note editor for creating and editing. The location is snapshotted when +
- * was tapped and never changes here, even if the user moves. Editing an
- * existing note keeps its original location (locations are immutable).
+ * Note editor for creating and editing. A new note starts at the fix that
+ * was current when + was tapped and keeps following the live fix until the
+ * refinement window ends and the location locks. Editing an existing note
+ * keeps its original location (locations are immutable).
  *
  * @param target - what is being edited.
+ * @param geo - geolocation state owned by the app shell; supplies the live
+ *   fix and the locked flag for new notes.
  * @param onDone - called when the user saves, deletes or cancels.
  */
-export function EditorScreen({ target, onDone }: { target: EditorTarget; onDone: () => void }) {
+export function EditorScreen({
+  target,
+  geo,
+  onDone,
+}: {
+  target: EditorTarget
+  geo: GeolocationState
+  onDone: () => void
+}) {
   const t = useT()
   const online = useOnline()
   const [text, setText] = useState(target.kind === 'edit' ? target.note.text : '')
@@ -32,16 +44,19 @@ export function EditorScreen({ target, onDone }: { target: EditorTarget; onDone:
     target.kind === 'edit' ? target.note.address : null,
   )
   const [resolving, setResolving] = useState(target.kind === 'new' && online)
+  // Still refining: the note's location keeps updating until the lock lands.
+  const updating = target.kind === 'new' && !geo.locked
 
   const location =
     target.kind === 'edit'
       ? { lat: target.note.lat, lng: target.note.lng }
-      : { lat: target.location.lat, lng: target.location.lng }
+      : // The tap-time fix is the fallback for the moment geo state resets.
+        (geo.location ?? target.location)
 
   useEffect(() => {
-    // Resolve the address for a brand-new location right away when online;
-    // offline creations are backfilled by the sync engine later.
-    if (target.kind !== 'new' || !online) return
+    // Resolve the address only once the location is locked (it is final at
+    // that point); offline creations are backfilled by the sync engine later.
+    if (target.kind !== 'new' || !online || !geo.locked) return
     let cancelled = false
     void reverseGeocode(location.lat, location.lng).then((addr) => {
       if (cancelled) return
@@ -51,9 +66,9 @@ export function EditorScreen({ target, onDone }: { target: EditorTarget; onDone:
     return () => {
       cancelled = true
     }
-    // Location is immutable for the lifetime of this screen.
+    // The location no longer changes once locked.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [target.kind, online, geo.locked])
 
   /** Persists the note (create or update) and leaves the editor. */
   const save = async () => {
@@ -81,18 +96,20 @@ export function EditorScreen({ target, onDone }: { target: EditorTarget; onDone:
 
       <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm text-muted-foreground">
         <MapPin className="size-4 shrink-0 text-primary" aria-hidden />
-        {resolving ? (
+        {/* While refining there is no address to show yet (it is resolved on
+            lock), so the live coordinates take its place. */}
+        {updating || (!resolving && !address) ? (
+          <span className="font-mono text-[13px]">
+            {`${location.lat.toFixed(5)}, ${location.lng.toFixed(5)}`}
+          </span>
+        ) : resolving ? (
           t('editor.resolvingAddress')
         ) : (
-          (address ?? (
-            <span className="font-mono text-[13px]">
-              {`${location.lat.toFixed(5)}, ${location.lng.toFixed(5)}`}
-            </span>
-          ))
+          address
         )}
         {target.kind === 'new' && (
           <span className="rounded-full bg-accent px-2 py-0.5 text-xs text-accent-foreground">
-            {t('editor.locationLocked')}
+            {t(updating ? 'editor.locationUpdating' : 'editor.locationLocked')}
           </span>
         )}
       </div>
