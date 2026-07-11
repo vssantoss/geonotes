@@ -1,0 +1,34 @@
+{
+  "name": "geonotes",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "wrangler pages dev dist",
+    "test": "vitest run",
+    "typecheck": "tsc -b"
+  },
+  "dependencies": {
+    "@simplewebauthn/browser": "13.3.0",
+    "@simplewebauthn/server": "13.3.2",
+    "dexie": "4.4.4",
+    "dexie-react-hooks": "4.4.0",
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260711.1",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.3",
+    "sharp": "0.35.3",
+    "typescript": "7.0.2",
+    "vite": "8.1.4",
+    "vite-plugin-pwa": "1.3.0",
+    "vitest": "4.1.10",
+    "workbox-window": "7.4.1",
+    "wrangler": "4.110.0"
+  }
+}

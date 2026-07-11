@@ -1,0 +1,5 @@
+# Local development config for wrangler pages dev. Copy to .dev.vars (gitignored).
+ENVIRONMENT=dev
+RP_ID=localhost
+ORIGIN=http://localhost:5173
+AUTH_SECRET=dev-only-secret-not-for-production
