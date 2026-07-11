@@ -1,5 +1,6 @@
 import { db } from './db'
 import { scheduleSync } from './sync'
+import { uuid } from './uuid'
 import { NOTE_MAX_LENGTH, type Note } from '../../shared/types'
 
 /**
@@ -18,7 +19,7 @@ export async function createNote(
 ): Promise<Note> {
   const now = Date.now()
   const note: Note = {
-    id: crypto.randomUUID(),
+    id: uuid(),
     text: text.slice(0, NOTE_MAX_LENGTH),
     lat,
     lng,

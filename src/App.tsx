@@ -18,8 +18,10 @@ export default function App() {
   const online = useOnline()
   const syncStatus = useSyncStatus()
   const [editing, setEditing] = useState<EditorTarget | null>(null)
-  // undefined = still reading IndexedDB, null/absent = signed out.
-  const token = useLiveQuery(() => db.kv.get(KV.sessionToken), [], undefined)
+  // undefined = still reading IndexedDB, null = signed out. Absent rows must
+  // map to null because Dexie resolves get() misses with undefined, which
+  // would be indistinguishable from the loading sentinel and blank the app.
+  const token = useLiveQuery(async () => (await db.kv.get(KV.sessionToken)) ?? null, [], undefined)
 
   // The auth flow continues past token issuance (passkey enrollment offer),
   // so the gate is explicit completion, not mere token presence. null means
