@@ -111,7 +111,7 @@ export function MainScreen({
       {/* GPS chip rides with the + button: it explains why + is disabled
           while acquiring and confirms the accuracy once ready or locked. */}
       <div className="fixed right-[max(1.25rem,env(safe-area-inset-right))] bottom-[max(1.25rem,env(safe-area-inset-bottom))] z-10 flex items-center gap-2.5">
-        <AccuracyBadge fix={fix} location={location} locked={locked} />
+        <AccuracyBadge fix={fix} location={location} locked={locked} error={error} />
         <button
           aria-label={t('main.addNote')}
           title={location ? t('main.addNote') : t('gps.waitingToAdd')}

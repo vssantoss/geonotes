@@ -1,4 +1,4 @@
-import { LocateFixed } from 'lucide-react'
+import { LocateFixed, LocateOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useT } from '../lib/i18n'
 import type { GeoFix } from '../lib/geo'
@@ -6,26 +6,44 @@ import type { GeoFix } from '../lib/geo'
 /**
  * Compact GPS instrument chip, docked next to the + button. Shows a pulsing
  * dot while acquiring, keeps pulsing over the best accuracy while the fix is
- * ready but still refining, and settles on a crosshair once the fix locks.
- * Numbers are mono; the full state description lives in the title/aria-label
- * to keep the chip short.
+ * ready but still refining, settles on a crosshair once the fix locks, and
+ * turns into a struck-out marker when acquisition fails. Numbers are mono;
+ * the full state description lives in the title/aria-label to keep the chip
+ * short.
  *
  * @param fix - latest raw fix (null before the first one).
  * @param location - best ready fix, refining until locked (null while acquiring).
  * @param locked - whether refinement finished and the location is final.
+ * @param error - acquisition error, or null; takes over the chip when set.
  */
 export function AccuracyBadge({
   fix,
   location,
   locked,
+  error,
 }: {
   fix: GeoFix | null
   location: GeoFix | null
   locked: boolean
+  error: 'denied' | 'unavailable' | 'timeout' | null
 }) {
   const t = useT()
   const base =
     'inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium shadow-md'
+
+  // No usable location: show a failed state instead of a live/acquiring one.
+  if (error) {
+    return (
+      <span
+        className={cn(base, 'border-destructive/40 bg-destructive/10 text-destructive')}
+        title={t(error === 'denied' ? 'gps.denied' : error === 'timeout' ? 'gps.timeout' : 'gps.unavailable')}
+        aria-label={t('gps.noFix')}
+      >
+        <LocateOff className="size-3.5" aria-hidden />
+        {t('gps.noFix')}
+      </span>
+    )
+  }
 
   if (location && locked) {
     return (
