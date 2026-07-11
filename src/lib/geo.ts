@@ -14,6 +14,9 @@ export interface GeoFix {
 
 /** Accuracy (m) at which the fix is good enough to add a note. */
 export const ACCURACY_READY_M = 30
+/** Accuracy (m) treated as the best GPS hardware delivers; refining further
+    is pointless, so such a fix locks immediately. */
+export const ACCURACY_BEST_M = 5
 /** How long (ms) to keep refining after a ready fix before locking. */
 export const REFINE_MS = 10000
 /** Minimum radius (m) within which a note counts as "at your location". */

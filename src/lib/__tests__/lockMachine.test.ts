@@ -27,10 +27,21 @@ describe('lock machine', () => {
     expect(readyFix(s)).toEqual(fix(30))
   })
 
-  it('does not lock immediately even on a very accurate fix', () => {
-    const s = reduceFix(INITIAL_LOCK_STATE, fix(5), 1000)
+  it('does not lock immediately on an accurate fix above the floor', () => {
+    const s = reduceFix(INITIAL_LOCK_STATE, fix(12), 1000)
     expect(s.locked).toBeNull()
     expect(s.refineDeadline).toBe(1000 + REFINE_MS)
+  })
+
+  it('locks immediately at the accuracy floor (<= 5 m)', () => {
+    const s = reduceFix(INITIAL_LOCK_STATE, fix(4), 1000)
+    expect(s.locked).toEqual(fix(4))
+  })
+
+  it('a floor fix during the refinement window ends it early', () => {
+    let s = reduceFix(INITIAL_LOCK_STATE, fix(25), 1000)
+    s = reduceFix(s, fix(5), 3000)
+    expect(s.locked).toEqual(fix(5))
   })
 
   it('locks with the best fix when the refinement window expires', () => {

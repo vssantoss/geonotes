@@ -1,4 +1,4 @@
-import { ACCURACY_READY_M, REFINE_MS, type GeoFix } from './geo'
+import { ACCURACY_BEST_M, ACCURACY_READY_M, REFINE_MS, type GeoFix } from './geo'
 
 // Pure state machine for deciding when the GPS fix is good enough to lock.
 // Locking kills GPS polling (battery); readiness unlocks the "+" button.
@@ -7,6 +7,8 @@ import { ACCURACY_READY_M, REFINE_MS, type GeoFix } from './geo'
 //  - accuracy <= 30 m: the fix is ready (notes can be added) and a 10 s
 //    refinement window starts to squeeze out a better fix.
 //  - a fix worse than 30 m during that window resets the 10 s timer.
+//  - accuracy <= 5 m: GPS cannot realistically do better, so lock right
+//    away instead of sitting out the rest of the window.
 //  - when the timer expires, lock with the best fix seen so far.
 
 /** State carried between fixes. */
@@ -44,13 +46,19 @@ export function readyFix(state: LockState): GeoFix | null {
  * @param state - current state.
  * @param fix - the new fix.
  * @param now - current epoch ms (injected for testability).
- * @returns the next state; `locked` becomes non-null when refinement ends.
+ * @returns the next state; `locked` becomes non-null when refinement ends
+ *   or a fix at the accuracy floor makes further refinement pointless.
  */
 export function reduceFix(state: LockState, fix: GeoFix, now: number): LockState {
   if (state.locked) return state
 
   // Newer fixes win ties so the lock reflects where the user is now.
   const best = !state.best || fix.accuracy <= state.best.accuracy ? fix : state.best
+
+  // Maximum accuracy achieved: waiting out the refinement window gains nothing.
+  if (best.accuracy <= ACCURACY_BEST_M) {
+    return { best, locked: best, refineDeadline: state.refineDeadline }
+  }
 
   // Not ready yet: no fix has reached the 30 m threshold.
   if (best.accuracy > ACCURACY_READY_M) {
