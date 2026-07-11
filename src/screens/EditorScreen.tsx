@@ -109,7 +109,11 @@ export function EditorScreen({
         )}
         {target.kind === 'new' && (
           <span className="rounded-full bg-accent px-2 py-0.5 text-xs text-accent-foreground">
-            {t(updating ? 'editor.locationUpdating' : 'editor.locationLocked')}
+            {updating
+              ? t('editor.locationUpdating')
+              : t('editor.locationLocked', {
+                  m: Math.round((geo.location ?? target.location).accuracy),
+                })}
           </span>
         )}
       </div>

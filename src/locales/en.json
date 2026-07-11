@@ -43,7 +43,7 @@
   "editor.delete": "Delete",
   "editor.deleteConfirm": "Delete this note forever? This cannot be undone.",
   "editor.deleteYes": "Delete forever",
-  "editor.locationLocked": "Location locked",
+  "editor.locationLocked": "Location locked within {m} m",
   "editor.locationUpdating": "Refining location…",
   "editor.resolvingAddress": "Resolving address…",
   "editor.noAddress": "Address unavailable",

@@ -43,7 +43,7 @@
   "editor.delete": "Excluir",
   "editor.deleteConfirm": "Excluir esta nota para sempre? Não é possível desfazer.",
   "editor.deleteYes": "Excluir para sempre",
-  "editor.locationLocked": "Localização fixada",
+  "editor.locationLocked": "Localização fixada em {m} m",
   "editor.locationUpdating": "Refinando a localização…",
   "editor.resolvingAddress": "Obtendo endereço…",
   "editor.noAddress": "Endereço indisponível",
