@@ -26,6 +26,7 @@
   "gps.refining": "Refinando sua localização…",
   "gps.denied": "É necessário acesso à localização. Ative no navegador e tente de novo.",
   "gps.unavailable": "Não foi possível obter sua localização.",
+  "gps.timeout": "Não foi possível obter uma localização precisa o suficiente. Vá para uma área mais aberta e tente de novo.",
   "gps.retry": "Tentar de novo",
   "gps.waitingToAdd": "Aguardando uma localização precisa para adicionar uma nota…",
   "main.here": "Neste local",

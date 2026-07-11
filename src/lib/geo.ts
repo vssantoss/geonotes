@@ -19,6 +19,9 @@ export const ACCURACY_READY_M = 30
 export const ACCURACY_BEST_M = 5
 /** How long (ms) to keep refining after a ready fix before locking. */
 export const REFINE_MS = 10000
+/** How long (ms) to try for a ready (<= 30 m) fix before giving up. GPS is
+    then stopped and adding a note stays disabled until the user retries. */
+export const ACQUIRE_TIMEOUT_MS = 60000
 /** Minimum radius (m) within which a note counts as "at your location". */
 export const NEARBY_MIN_RADIUS_M = 25
 

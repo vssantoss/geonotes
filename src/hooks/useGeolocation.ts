@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { watchPosition, type GeoFix } from '../lib/geo'
+import { ACQUIRE_TIMEOUT_MS, watchPosition, type GeoFix } from '../lib/geo'
 import {
   INITIAL_LOCK_STATE,
   readyFix,
@@ -20,8 +20,9 @@ export interface GeolocationState {
   location: GeoFix | null
   /** True once refinement finished; GPS is already off at that point. */
   locked: boolean
-  /** Permission or availability error, or null. */
-  error: 'denied' | 'unavailable' | null
+  /** Permission, availability or acquisition-timeout error, or null.
+      'timeout' means no <= 30 m fix arrived within the acquisition window. */
+  error: 'denied' | 'unavailable' | 'timeout' | null
   /** Restarts acquisition after an error or a stale lock. */
   retry: () => void
 }
@@ -39,15 +40,18 @@ export interface GeolocationState {
 export function useGeolocation(active: boolean): GeolocationState {
   const [state, setState] = useState<LockState>(INITIAL_LOCK_STATE)
   const [fix, setFix] = useState<GeoFix | null>(null)
-  const [error, setError] = useState<'denied' | 'unavailable' | null>(null)
+  const [error, setError] = useState<'denied' | 'unavailable' | 'timeout' | null>(null)
   const [attempt, setAttempt] = useState(0)
   const stateRef = useRef<LockState>(INITIAL_LOCK_STATE)
   // Epoch ms of the current lock, for the staleness check on refocus.
   const lockedAtRef = useRef<number | null>(null)
+  // True after acquisition gave up (timeout); drives re-acquire on refocus.
+  const timedOutRef = useRef(false)
 
   const retry = useCallback(() => {
     stateRef.current = INITIAL_LOCK_STATE
     lockedAtRef.current = null
+    timedOutRef.current = false
     setState(INITIAL_LOCK_STATE)
     setError(null)
     setAttempt((n) => n + 1)
@@ -57,16 +61,22 @@ export function useGeolocation(active: boolean): GeolocationState {
     let refineTimer: ReturnType<typeof setTimeout> | null = null
     let stopped = false
 
-    /** Publishes a machine state; on lock, stops GPS and the timer. */
+    /** Publishes a machine state; on lock, stops GPS and the timers. */
     const commit = (next: LockState) => {
       stateRef.current = next
       setState(next)
       if (next.locked) {
         lockedAtRef.current = Date.now()
-        if (refineTimer) clearTimeout(refineTimer)
-        stop()
-        stopped = true
+        finish()
       }
+    }
+
+    /** Stops the watch and clears both timers; the acquisition is over. */
+    const finish = () => {
+      if (refineTimer) clearTimeout(refineTimer)
+      clearTimeout(acquireTimer)
+      stop()
+      stopped = true
     }
 
     /** (Re)schedules the real-time mirror of the machine's refine deadline. */
@@ -76,6 +86,16 @@ export function useGeolocation(active: boolean): GeolocationState {
         commit(reduceRefineExpired(stateRef.current))
       }, Math.max(0, deadline - Date.now()))
     }
+
+    // Give up if no ready (<= 30 m) fix arrives in time: stop GPS and report a
+    // timeout so the + button stays disabled until the user retries. Reaching
+    // readiness clears this timer, so refinement is never cut short.
+    const acquireTimer = setTimeout(() => {
+      if (stopped || readyFix(stateRef.current)) return
+      timedOutRef.current = true
+      finish()
+      setError('timeout')
+    }, ACQUIRE_TIMEOUT_MS)
 
     const stop = watchPosition(
       (newFix) => {
@@ -89,6 +109,9 @@ export function useGeolocation(active: boolean): GeolocationState {
         if (!next.locked && next.refineDeadline !== null && next.refineDeadline !== prev.refineDeadline) {
           armTimer(next.refineDeadline)
         }
+        // A ready fix means acquisition succeeded; the refine window (or an
+        // immediate lock) takes over from the acquisition timeout.
+        if (readyFix(next)) clearTimeout(acquireTimer)
         commit(next)
       },
       (code) => {
@@ -101,6 +124,7 @@ export function useGeolocation(active: boolean): GeolocationState {
       stopped = true
       stop()
       if (refineTimer) clearTimeout(refineTimer)
+      clearTimeout(acquireTimer)
     }
     // `attempt` re-runs acquisition on retry() and on stale-lock refocus.
   }, [attempt])
@@ -108,12 +132,14 @@ export function useGeolocation(active: boolean): GeolocationState {
   useEffect(() => {
     if (!active) return
 
-    /** Re-acquires when the main screen surfaces with a lock past its
-        reuse window; a running acquisition is left alone. */
+    /** Re-acquires when the main screen surfaces with a lock past its reuse
+        window, or after acquisition timed out; a running acquisition is left
+        alone. */
     const maybeRestart = () => {
       if (document.visibilityState !== 'visible') return
       const lockedAt = lockedAtRef.current
-      if (lockedAt !== null && Date.now() - lockedAt > LOCK_REUSE_MS) retry()
+      const staleLock = lockedAt !== null && Date.now() - lockedAt > LOCK_REUSE_MS
+      if (staleLock || timedOutRef.current) retry()
     }
 
     // Becoming active (e.g. returning from the editor) counts as focus.

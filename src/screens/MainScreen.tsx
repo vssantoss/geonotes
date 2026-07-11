@@ -81,7 +81,7 @@ export function MainScreen({
 
       {error && (
         <Notice>
-          {t(error === 'denied' ? 'gps.denied' : 'gps.unavailable')}
+          {t(error === 'denied' ? 'gps.denied' : error === 'timeout' ? 'gps.timeout' : 'gps.unavailable')}
           <Button variant="outline" size="xs" onClick={retry}>
             {t('gps.retry')}
           </Button>
