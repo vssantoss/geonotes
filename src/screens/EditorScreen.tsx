@@ -111,12 +111,24 @@ export function EditorScreen({
 
   return (
     <div className="flex flex-1 flex-col gap-3 px-4 pt-2 pb-6">
-      <h2 className="font-display text-lg font-semibold tracking-tight">
-        {t(target.kind === 'edit' ? 'editor.edit' : 'editor.new')}
-      </h2>
+      <div className="flex items-center gap-2">
+        <h2 className="flex-1 font-display text-lg font-semibold tracking-tight">
+          {t(target.kind === 'edit' ? 'editor.edit' : 'editor.new')}
+        </h2>
+        {/* Docked by the title so a long address gets the whole line below. */}
+        {target.kind === 'new' && (
+          <span className="shrink-0 rounded-full bg-accent px-2 py-0.5 text-xs text-accent-foreground">
+            {updating
+              ? t('editor.locationUpdating')
+              : t('editor.locationLocked', {
+                  m: Math.round((geo.location ?? target.location).accuracy),
+                })}
+          </span>
+        )}
+      </div>
 
-      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm text-muted-foreground">
-        <MapPin className="size-4 shrink-0 text-primary" aria-hidden />
+      <div className="flex items-start gap-1.5 text-sm text-muted-foreground">
+        <MapPin className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
         {/* While refining there is no address to show yet (it is resolved on
             lock), so the live coordinates take its place. */}
         {updating || (!resolving && !address) ? (
@@ -126,16 +138,7 @@ export function EditorScreen({
         ) : resolving ? (
           t('editor.resolvingAddress')
         ) : (
-          address
-        )}
-        {target.kind === 'new' && (
-          <span className="rounded-full bg-accent px-2 py-0.5 text-xs text-accent-foreground">
-            {updating
-              ? t('editor.locationUpdating')
-              : t('editor.locationLocked', {
-                  m: Math.round((geo.location ?? target.location).accuracy),
-                })}
-          </span>
+          <span className="wrap-anywhere">{address}</span>
         )}
       </div>
 
