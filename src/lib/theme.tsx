@@ -1,41 +1,51 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 
-/** The user's theme preference: follow the OS, or force light/dark. */
-export type ThemePreference = 'system' | 'light' | 'dark'
+/** An explicit theme choice; the absence of one means "follow the OS". */
+export type ThemeChoice = 'light' | 'dark'
 
 /** localStorage key; also read by the pre-paint script in index.html. */
 export const THEME_STORAGE_KEY = 'geonotes-theme'
+
+/** How long (ms) an explicit choice is remembered before reverting to the OS. */
+const CHOICE_TTL_MS = 30 * 24 * 60 * 60 * 1000
 
 /* Browser-chrome colors matching --background in each theme, kept in sync
    with global.css so the status bar blends with the app. */
 const THEME_COLOR = { light: '#f1f2eb', dark: '#161a17' }
 
 /**
- * Reads the stored preference, defaulting to 'system' when absent or when
- * storage is unavailable (private browsing on some engines).
+ * Reads the saved explicit choice, returning null when it is absent, expired,
+ * malformed or storage is unavailable (private browsing) so the app falls
+ * back to the OS setting.
  *
- * @returns the stored preference or 'system'.
+ * @returns the remembered 'light'/'dark' choice, or null to follow the OS.
  */
-function readStoredPreference(): ThemePreference {
+function readStoredChoice(): ThemeChoice | null {
   try {
-    const stored = localStorage.getItem(THEME_STORAGE_KEY)
-    if (stored === 'light' || stored === 'dark' || stored === 'system') return stored
+    const raw = localStorage.getItem(THEME_STORAGE_KEY)
+    if (!raw) return null
+    const { value, expires } = JSON.parse(raw) as { value?: unknown; expires?: unknown }
+    if ((value === 'light' || value === 'dark') && typeof expires === 'number' && Date.now() < expires) {
+      return value
+    }
   } catch {
-    /* storage blocked: fall through to system */
+    /* absent, malformed or blocked: fall through to the OS setting */
   }
-  return 'system'
+  return null
+}
+
+/** @returns true when the OS currently prefers a dark color scheme. */
+function systemPrefersDark(): boolean {
+  return window.matchMedia('(prefers-color-scheme: dark)').matches
 }
 
 /**
- * Applies a preference to the document: toggles the `.dark` class that
- * drives every token and updates the theme-color meta for browser chrome.
+ * Applies a resolved appearance to the document: toggles the `.dark` class
+ * that drives every token and updates the theme-color meta for browser chrome.
  *
- * @param preference - the preference to apply.
+ * @param dark - whether dark mode should be shown.
  */
-function applyTheme(preference: ThemePreference) {
-  const dark =
-    preference === 'dark' ||
-    (preference === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+function applyDark(dark: boolean) {
   document.documentElement.classList.toggle('dark', dark)
   document
     .querySelector('meta[name="theme-color"]')
@@ -43,46 +53,58 @@ function applyTheme(preference: ThemePreference) {
 }
 
 const ThemeContext = createContext<{
-  theme: ThemePreference
-  setTheme: (theme: ThemePreference) => void
-}>({ theme: 'system', setTheme: () => {} })
+  /** Whether dark mode is currently shown, whatever its source. */
+  isDark: boolean
+  /** Records an explicit choice, remembered for a month. */
+  setChoice: (choice: ThemeChoice) => void
+}>({ isDark: false, setChoice: () => {} })
 
 /**
- * Provides the theme preference and keeps the document in sync with it,
- * including live OS changes while in 'system' mode.
+ * Provides the resolved appearance and keeps the document in sync: an explicit
+ * choice wins for a month, otherwise the app follows the OS setting live.
  *
  * @param children - app subtree that needs theming.
  */
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<ThemePreference>(readStoredPreference)
+  // null = follow the OS; a value = explicit user choice.
+  const [choice, setChoiceState] = useState<ThemeChoice | null>(readStoredChoice)
+  const [systemDark, setSystemDark] = useState(systemPrefersDark)
+
+  // The explicit choice overrides the OS; without one, track the OS live.
+  const isDark = choice ? choice === 'dark' : systemDark
 
   useEffect(() => {
-    applyTheme(theme)
-    if (theme !== 'system') return
-    // While following the OS, react to the user flipping their system theme.
+    applyDark(isDark)
+  }, [isDark])
+
+  useEffect(() => {
+    // Keep following the OS when the user flips their system theme.
     const query = window.matchMedia('(prefers-color-scheme: dark)')
-    const onChange = () => applyTheme('system')
+    const onChange = () => setSystemDark(query.matches)
     query.addEventListener('change', onChange)
     return () => query.removeEventListener('change', onChange)
-  }, [theme])
+  }, [])
 
-  /** Persists and applies a new preference. */
-  const setTheme = (next: ThemePreference) => {
+  /** Persists an explicit choice with a one-month expiry and applies it. */
+  const setChoice = (next: ThemeChoice) => {
     try {
-      localStorage.setItem(THEME_STORAGE_KEY, next)
+      localStorage.setItem(
+        THEME_STORAGE_KEY,
+        JSON.stringify({ value: next, expires: Date.now() + CHOICE_TTL_MS }),
+      )
     } catch {
-      /* storage blocked: preference lives for this session only */
+      /* storage blocked: the choice lives for this session only */
     }
-    setThemeState(next)
+    setChoiceState(next)
   }
 
-  return <ThemeContext.Provider value={{ theme, setTheme }}>{children}</ThemeContext.Provider>
+  return <ThemeContext.Provider value={{ isDark, setChoice }}>{children}</ThemeContext.Provider>
 }
 
 /**
- * Hook exposing the current theme preference and its setter.
+ * Hook exposing the resolved appearance and the choice setter.
  *
- * @returns { theme, setTheme } from the nearest ThemeProvider.
+ * @returns { isDark, setChoice } from the nearest ThemeProvider.
  */
 export function useTheme() {
   return useContext(ThemeContext)

@@ -10,20 +10,33 @@
     <title>GeoNotes</title>
     <script>
       // Apply the stored theme before first paint to avoid a light flash.
-      // Kept in sync with THEME_STORAGE_KEY / THEME_COLOR in src/lib/theme.tsx.
+      // Kept in sync with THEME_STORAGE_KEY / THEME_COLOR / CHOICE_TTL_MS in
+      // src/lib/theme.tsx: an explicit choice wins until it expires, otherwise
+      // follow the OS.
       ;(function () {
+        var choice = null
         try {
-          var pref = localStorage.getItem('geonotes-theme')
-          var dark =
-            pref === 'dark' ||
-            (pref !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
-          if (dark) {
-            document.documentElement.classList.add('dark')
-            var meta = document.querySelector('meta[name="theme-color"]')
-            if (meta) meta.setAttribute('content', '#161a17')
+          var raw = localStorage.getItem('geonotes-theme')
+          if (raw) {
+            var parsed = JSON.parse(raw)
+            if (
+              (parsed.value === 'light' || parsed.value === 'dark') &&
+              typeof parsed.expires === 'number' &&
+              Date.now() < parsed.expires
+            ) {
+              choice = parsed.value
+            }
           }
         } catch (e) {
-          /* storage blocked: stay on the light default */
+          /* absent, malformed or blocked: fall back to the OS */
+        }
+        var dark = choice
+          ? choice === 'dark'
+          : window.matchMedia('(prefers-color-scheme: dark)').matches
+        if (dark) {
+          document.documentElement.classList.add('dark')
+          var meta = document.querySelector('meta[name="theme-color"]')
+          if (meta) meta.setAttribute('content', '#161a17')
         }
       })()
     </script>

@@ -54,8 +54,5 @@
   "sync.error": "Sync failed. Will retry.",
   "attribution.osm": "Addresses © OpenStreetMap contributors",
   "common.close": "Close",
-  "theme.label": "Theme",
-  "theme.system": "System",
-  "theme.light": "Light",
-  "theme.dark": "Dark"
+  "theme.toggle": "Toggle light and dark theme"
 }

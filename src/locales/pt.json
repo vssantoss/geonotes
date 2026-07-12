@@ -54,8 +54,5 @@
   "sync.error": "Falha na sincronização. Tentaremos de novo.",
   "attribution.osm": "Endereços © colaboradores do OpenStreetMap",
   "common.close": "Fechar",
-  "theme.label": "Tema",
-  "theme.system": "Sistema",
-  "theme.light": "Claro",
-  "theme.dark": "Escuro"
+  "theme.toggle": "Alternar entre tema claro e escuro"
 }

@@ -54,8 +54,5 @@
   "sync.error": "Falló la sincronización. Se reintentará.",
   "attribution.osm": "Direcciones © colaboradores de OpenStreetMap",
   "common.close": "Cerrar",
-  "theme.label": "Tema",
-  "theme.system": "Sistema",
-  "theme.light": "Claro",
-  "theme.dark": "Oscuro"
+  "theme.toggle": "Cambiar entre tema claro y oscuro"
 }
