@@ -12,7 +12,7 @@ import { useT } from './lib/i18n'
 import { MainScreen } from './screens/MainScreen'
 import { EditorScreen, type EditorTarget } from './screens/EditorScreen'
 import { AuthScreen } from './screens/AuthScreen'
-import { ConfirmDialog } from './components/ConfirmDialog'
+import { SignOutDialog } from './components/SignOutDialog'
 import { Notice } from './components/Notice'
 import { ThemeToggle } from './components/ThemeToggle'
 
@@ -105,13 +105,14 @@ export default function App() {
       </footer>
 
       {confirmSignOut && (
-        <ConfirmDialog
-          message={t('auth.signOutConfirm')}
-          confirmLabel={t('auth.signOut')}
-          cancelLabel={t('editor.cancel')}
-          onConfirm={() => {
+        <SignOutDialog
+          onKeep={() => {
             setConfirmSignOut(false)
-            void signOut()
+            void signOut(true)
+          }}
+          onDelete={() => {
+            setConfirmSignOut(false)
+            void signOut(false)
           }}
           onCancel={() => setConfirmSignOut(false)}
         />
