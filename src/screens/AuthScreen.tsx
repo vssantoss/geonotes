@@ -2,51 +2,63 @@ import { useState } from 'react'
 import { MapPin } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { passkeyLogin, registerPasskey, requestEmailCode, verifyEmailCode } from '../lib/auth'
+import { createAccountWithPasskey, passkeyLogin } from '../lib/auth'
+import { ApiError } from '../lib/api'
 import { useT } from '../lib/i18n'
 
-type Step = 'email' | 'method' | 'code' | 'offerPasskey'
+type Step = 'start' | 'noPasskey' | 'createEmail'
 
 /**
- * Passwordless sign-in flow: e-mail first, then either a passkey ceremony or
- * a 6-digit e-mailed code, followed by an optional passkey enrollment offer.
- * Signing in is optional (the app is fully usable local-only), so the flow
- * can always be left without authenticating.
+ * Passwordless sign-in flow, passkey-first: tapping "Log in" runs a
+ * usernameless passkey ceremony. When no passkey is found the user is offered
+ * account creation, which collects an e-mail (kept for future recovery, not
+ * verified yet) and enrolls a passkey. Signing in is optional (the app is fully
+ * usable local-only), so the flow can always be left without authenticating.
  *
  * @param onSignedIn - called once a session is established.
  * @param onCancel - called when the user leaves without signing in.
  */
 export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; onCancel: () => void }) {
   const t = useT()
-  const [step, setStep] = useState<Step>('email')
+  const [step, setStep] = useState<Step>('start')
   const [email, setEmail] = useState('')
-  const [code, setCode] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
   /** Runs an async auth action with busy/error handling around it. */
-  const run = async (action: () => Promise<void>, errorKey = 'auth.error.generic') => {
+  const run = async (action: () => Promise<void>, onError?: (err: unknown) => void) => {
     setBusy(true)
     setError(null)
     try {
       await action()
-    } catch {
-      setError(t(errorKey))
+    } catch (err) {
+      if (onError) onError(err)
+      else setError(t('auth.error.generic'))
     } finally {
       setBusy(false)
     }
   }
 
-  const sendCode = () =>
-    run(async () => {
-      const devCode = await requestEmailCode(email)
-      // In dev mode the server echoes the code so the flow is testable
-      // without a mail provider; prefill it for convenience.
-      if (devCode) setCode(devCode)
-      setStep('code')
-    })
-
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+
+  // Attempt a usernameless login; a failed ceremony (no passkey offered or
+  // cancelled) drops to the account-creation offer rather than showing an error.
+  const logIn = () =>
+    run(
+      () => passkeyLogin().then(onSignedIn),
+      () => setStep('noPasskey'),
+    )
+
+  const createAccount = () =>
+    run(
+      () => createAccountWithPasskey(email).then(onSignedIn),
+      (err) =>
+        setError(
+          err instanceof ApiError && err.status === 409
+            ? t('auth.error.accountExists')
+            : t('auth.error.generic'),
+        ),
+    )
 
   return (
     <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center gap-4 p-6">
@@ -55,23 +67,12 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
         {t('app.name')}
       </h1>
 
-      {step === 'email' && (
+      {step === 'start' && (
         <>
           <p className="text-sm text-muted-foreground">{t('auth.subtitle')}</p>
           <p className="text-sm text-muted-foreground">{t('auth.optionalHint')}</p>
-          <label className="flex flex-col gap-1.5 text-sm font-medium">
-            {t('auth.emailLabel')}
-            <Input
-              type="email"
-              autoComplete="email webauthn"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && emailValid && setStep('method')}
-              className="bg-card"
-            />
-          </label>
-          <Button disabled={!emailValid || busy} onClick={() => setStep('method')}>
-            {t('auth.continue')}
+          <Button disabled={busy} onClick={() => void logIn()}>
+            {t('auth.logIn')}
           </Button>
           <Button variant="outline" disabled={busy} onClick={onCancel}>
             {t('auth.back')}
@@ -79,60 +80,37 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
         </>
       )}
 
-      {step === 'method' && (
+      {step === 'noPasskey' && (
         <>
-          <p className="text-sm text-muted-foreground">{email}</p>
-          <Button
-            disabled={busy}
-            onClick={() => run(() => passkeyLogin(email).then(onSignedIn), 'auth.error.noPasskey')}
-          >
-            {t('auth.usePasskey')}
+          <p className="text-sm text-muted-foreground">{t('auth.noPasskeyFound')}</p>
+          <Button disabled={busy} onClick={() => setStep('createEmail')}>
+            {t('auth.createAccount')}
           </Button>
-          <Button variant="outline" disabled={busy} onClick={() => void sendCode()}>
-            {t('auth.sendCode')}
-          </Button>
-          <Button variant="ghost" disabled={busy} onClick={() => setStep('email')}>
-            {t('auth.back')}
+          <Button variant="outline" disabled={busy} onClick={onCancel}>
+            {t('auth.notNow')}
           </Button>
         </>
       )}
 
-      {step === 'code' && (
+      {step === 'createEmail' && (
         <>
-          <p className="text-sm text-muted-foreground">{t('auth.codeSent', { email })}</p>
+          <p className="text-sm text-muted-foreground">{t('auth.subtitle')}</p>
           <label className="flex flex-col gap-1.5 text-sm font-medium">
-            {t('auth.codeLabel')}
+            {t('auth.emailLabel')}
             <Input
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              maxLength={6}
-              value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-              className="bg-card text-center font-mono text-lg tracking-[0.4em]"
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && emailValid && !busy && void createAccount()}
+              className="bg-card"
             />
           </label>
-          <Button
-            disabled={code.length !== 6 || busy}
-            onClick={() =>
-              run(() => verifyEmailCode(email, code).then(() => setStep('offerPasskey')), 'auth.error.badCode')
-            }
-          >
-            {t('auth.verify')}
-          </Button>
-          <Button variant="ghost" disabled={busy} onClick={() => setStep('method')}>
-            {t('auth.back')}
-          </Button>
-        </>
-      )}
-
-      {step === 'offerPasskey' && (
-        <>
-          <p className="text-sm text-muted-foreground">{t('auth.passkeyOffer')}</p>
-          <Button disabled={busy} onClick={() => run(() => registerPasskey().then(onSignedIn))}>
+          <Button disabled={!emailValid || busy} onClick={() => void createAccount()}>
             {t('auth.createPasskey')}
           </Button>
-          <Button variant="outline" disabled={busy} onClick={onSignedIn}>
-            {t('auth.skipPasskey')}
+          <Button variant="ghost" disabled={busy} onClick={() => setStep('noPasskey')}>
+            {t('auth.back')}
           </Button>
         </>
       )}

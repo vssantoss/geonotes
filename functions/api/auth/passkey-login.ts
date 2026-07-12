@@ -3,36 +3,41 @@ import { isoBase64URL } from '@simplewebauthn/server/helpers'
 import type { AuthenticationResponseJSON } from '@simplewebauthn/server'
 import { json, HttpError, route } from '../../_lib/http'
 import { createSession } from '../../_lib/session'
-import { verifyChallenge } from '../../_lib/challenge'
-import { normalizeEmail } from './email-request'
+import { verifyChallenge, PASSKEY_LOGIN_SUBJECT } from '../../_lib/challenge'
 import { parseTransports } from './passkey-register-options'
 import type { Env } from '../../_lib/env'
 
 /**
- * POST /api/auth/passkey-login {email, response, challengeToken}: finishes a
- * passkey sign-in and issues a session.
+ * POST /api/auth/passkey-login {response, challengeToken}: finishes a
+ * usernameless passkey sign-in. The user is resolved from the presented
+ * credential, then a session is issued. Returns the account e-mail so the
+ * client can show it (the browser never learns it from the ceremony).
  */
 export const onRequestPost = route<Env>(async ({ env, request }) => {
   const body = (await request.json().catch(() => null)) as
-    | { email?: unknown; response?: AuthenticationResponseJSON; challengeToken?: string }
+    | { response?: AuthenticationResponseJSON; challengeToken?: string }
     | null
-  const email = normalizeEmail(body?.email)
   if (!body?.response || typeof body.challengeToken !== 'string') {
     throw new HttpError(400, 'bad body')
   }
 
-  const user = await env.DB.prepare('SELECT id FROM users WHERE email = ?')
-    .bind(email)
-    .first<{ id: string }>()
-  if (!user) throw new HttpError(401, 'auth failed')
+  const expectedChallenge = await verifyChallenge(env, body.challengeToken, PASSKEY_LOGIN_SUBJECT)
 
-  const expectedChallenge = await verifyChallenge(env, body.challengeToken, user.id)
-
+  // The credential id identifies both the authenticator and its owner.
   const cred = await env.DB.prepare(
-    'SELECT id, public_key, counter, transports FROM credentials WHERE id = ? AND user_id = ?',
+    `SELECT c.id, c.user_id, c.public_key, c.counter, c.transports, u.email
+       FROM credentials c JOIN users u ON u.id = c.user_id
+      WHERE c.id = ?`,
   )
-    .bind(body.response.id, user.id)
-    .first<{ id: string; public_key: string; counter: number; transports: string | null }>()
+    .bind(body.response.id)
+    .first<{
+      id: string
+      user_id: string
+      public_key: string
+      counter: number
+      transports: string | null
+      email: string
+    }>()
   if (!cred) throw new HttpError(401, 'auth failed')
 
   const verification = await verifyAuthenticationResponse({
@@ -55,5 +60,5 @@ export const onRequestPost = route<Env>(async ({ env, request }) => {
     .bind(verification.authenticationInfo.newCounter, cred.id)
     .run()
 
-  return json({ token: await createSession(env, user.id) })
+  return json({ token: await createSession(env, cred.user_id), email: cred.email })
 })

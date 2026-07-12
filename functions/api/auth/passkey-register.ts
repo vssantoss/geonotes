@@ -2,24 +2,32 @@ import { verifyRegistrationResponse } from '@simplewebauthn/server'
 import { isoBase64URL } from '@simplewebauthn/server/helpers'
 import type { RegistrationResponseJSON } from '@simplewebauthn/server'
 import { json, HttpError, route } from '../../_lib/http'
-import { requireUser } from '../../_lib/session'
+import { createSession } from '../../_lib/session'
 import { verifyChallenge } from '../../_lib/challenge'
+import { normalizeEmail } from './email-request'
 import type { Env } from '../../_lib/env'
 
 /**
- * POST /api/auth/passkey-register {response, challengeToken}: finishes
- * passkey enrollment and stores the credential's public key.
+ * POST /api/auth/passkey-register {email, response, challengeToken}: finishes
+ * creating a new account, stores the credential and issues a session so the
+ * user is signed in immediately. The challenge token is bound to the account's
+ * id, so a mismatched e-mail cannot complete another account's registration.
  */
 export const onRequestPost = route<Env>(async ({ env, request }) => {
-  const userId = await requireUser(env, request)
   const body = (await request.json().catch(() => null)) as
-    | { response?: RegistrationResponseJSON; challengeToken?: string }
+    | { email?: unknown; response?: RegistrationResponseJSON; challengeToken?: string }
     | null
+  const email = normalizeEmail(body?.email)
   if (!body?.response || typeof body.challengeToken !== 'string') {
     throw new HttpError(400, 'bad body')
   }
 
-  const expectedChallenge = await verifyChallenge(env, body.challengeToken, userId)
+  const user = await env.DB.prepare('SELECT id FROM users WHERE email = ?')
+    .bind(email)
+    .first<{ id: string }>()
+  if (!user) throw new HttpError(400, 'no pending registration')
+
+  const expectedChallenge = await verifyChallenge(env, body.challengeToken, user.id)
   const verification = await verifyRegistrationResponse({
     response: body.response,
     expectedChallenge,
@@ -36,7 +44,7 @@ export const onRequestPost = route<Env>(async ({ env, request }) => {
   )
     .bind(
       credential.id,
-      userId,
+      user.id,
       isoBase64URL.fromBuffer(credential.publicKey),
       credential.counter,
       JSON.stringify(credential.transports ?? []),
@@ -44,5 +52,5 @@ export const onRequestPost = route<Env>(async ({ env, request }) => {
     )
     .run()
 
-  return json({ ok: true })
+  return json({ token: await createSession(env, user.id) })
 })

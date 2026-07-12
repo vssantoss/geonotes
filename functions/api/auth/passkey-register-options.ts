@@ -1,39 +1,52 @@
 import { generateRegistrationOptions } from '@simplewebauthn/server'
 import type { AuthenticatorTransportFuture } from '@simplewebauthn/server'
 import { json, HttpError, route } from '../../_lib/http'
-import { requireUser } from '../../_lib/session'
 import { signChallenge } from '../../_lib/challenge'
+import { normalizeEmail } from './email-request'
 import type { Env } from '../../_lib/env'
 
 /**
- * POST /api/auth/passkey-register-options: starts passkey enrollment for the
- * signed-in user. The challenge comes back HMAC-signed so no server state
- * (and no D1 write) is needed between the two ceremony halves.
+ * POST /api/auth/passkey-register-options {email}: starts creating a new
+ * account with a passkey. No session is required: proving control of a fresh
+ * authenticator is the registration. The e-mail is recorded for future account
+ * recovery (not built yet) but is not verified here.
+ *
+ * An address that already has a passkey is rejected: since the e-mail is
+ * unverified, enrolling onto it would let anyone who knows the address hijack
+ * the account. A real owner's recovery path is intentionally deferred.
  */
 export const onRequestPost = route<Env>(async ({ env, request }) => {
-  const userId = await requireUser(env, request)
+  const body = (await request.json().catch(() => null)) as { email?: unknown } | null
+  const email = normalizeEmail(body?.email)
 
-  const user = await env.DB.prepare('SELECT email FROM users WHERE id = ?')
-    .bind(userId)
-    .first<{ email: string }>()
-  if (!user) throw new HttpError(401, 'unknown user')
+  const user = await env.DB.prepare('SELECT id FROM users WHERE email = ?')
+    .bind(email)
+    .first<{ id: string }>()
+  if (user) {
+    const creds = await env.DB.prepare('SELECT count(*) AS n FROM credentials WHERE user_id = ?')
+      .bind(user.id)
+      .first<{ n: number }>()
+    if ((creds?.n ?? 0) > 0) throw new HttpError(409, 'account exists')
+  }
 
-  const existing = await env.DB.prepare('SELECT id, transports FROM credentials WHERE user_id = ?')
-    .bind(userId)
-    .all<{ id: string; transports: string | null }>()
+  // Reuse an orphan row (an earlier attempt that never completed a passkey)
+  // or create the account now so the credential has an owner to attach to.
+  const userId = user?.id ?? crypto.randomUUID()
+  if (!user) {
+    await env.DB.prepare('INSERT INTO users (id, email, created_at) VALUES (?, ?, ?)')
+      .bind(userId, email, Date.now())
+      .run()
+  }
 
   const options = await generateRegistrationOptions({
     rpName: 'GeoNotes',
     rpID: env.RP_ID,
     userID: Uint8Array.from(new TextEncoder().encode(userId)),
-    userName: user.email,
+    userName: email,
     attestationType: 'none',
-    // Prevents registering the same authenticator twice.
-    excludeCredentials: existing.results.map((c) => ({
-      id: c.id,
-      transports: parseTransports(c.transports),
-    })),
-    authenticatorSelection: { residentKey: 'preferred', userVerification: 'preferred' },
+    // A resident (discoverable) credential is required so the later sign-in can
+    // be usernameless.
+    authenticatorSelection: { residentKey: 'required', userVerification: 'preferred' },
   })
 
   return json({ options, challengeToken: await signChallenge(env, options.challenge, userId) })

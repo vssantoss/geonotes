@@ -9,6 +9,11 @@ import type { Env } from './env'
 /** Challenge tokens are valid for 5 minutes, enough for one ceremony. */
 const CHALLENGE_TTL_MS = 5 * 60 * 1000
 
+/** Fixed challenge subject for usernameless passkey login: the user is
+    identified from the discoverable credential they present, not from a
+    subject known up front, so the token is bound to this constant instead. */
+export const PASSKEY_LOGIN_SUBJECT = 'passkey-login'
+
 /**
  * Signs a challenge for a subject (user id or e-mail).
  *
