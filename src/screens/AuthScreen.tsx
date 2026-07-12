@@ -7,6 +7,7 @@ import {
   finishSignIn,
   passkeyLogin,
   pendingAccountSwitch,
+  wouldDisplaceNotes,
   type PendingSignIn,
 } from '../lib/auth'
 import { ApiError } from '../lib/api'
@@ -38,6 +39,9 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
   // A verified ceremony held back because applying it would remove another
   // account's notes from this device; resolved by the confirmation dialog.
   const [pending, setPending] = useState<PendingSignIn | null>(null)
+  // Set when account creation is paused because creating it would remove a
+  // different account's notes; confirming runs the actual creation.
+  const [confirmCreate, setConfirmCreate] = useState(false)
 
   /**
    * Runs a ceremony, then either applies it or, when it would discard another
@@ -78,16 +82,42 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
     // A failed/absent passkey ceremony drops to the account-creation offer.
     void startFlow(passkeyLogin, () => setStep('noPasskey'))
 
-  const createAccount = () =>
-    void startFlow(
-      () => createAccountWithPasskey(email),
-      (err) =>
-        setError(
-          err instanceof ApiError && err.status === 409
-            ? t('auth.error.accountExists')
-            : t('auth.error.generic'),
-        ),
-    )
+  /**
+   * Starts account creation. The target e-mail is known up front, so it first
+   * checks whether creating this account would discard another account's notes
+   * and, if so, pauses for confirmation before registering anything (so
+   * cancelling truly cancels creation). Otherwise it creates straight away.
+   */
+  const createAccount = async () => {
+    setError(null)
+    if (await wouldDisplaceNotes(email)) {
+      setConfirmCreate(true)
+      return
+    }
+    await runCreate()
+  }
+
+  /**
+   * Registers the account and passkey, then establishes the session. The
+   * account-switch check already ran in createAccount, so this applies the
+   * result directly without re-prompting.
+   */
+  const runCreate = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      await finishSignIn(await createAccountWithPasskey(email))
+      onSignedIn()
+    } catch (err) {
+      setError(
+        err instanceof ApiError && err.status === 409
+          ? t('auth.error.accountExists')
+          : t('auth.error.generic'),
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
 
   /** Applies the deferred sign-in after the user confirms the account switch. */
   const confirmSwitch = async () => {
@@ -149,11 +179,11 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
               autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && emailValid && !busy && createAccount()}
+              onKeyDown={(e) => e.key === 'Enter' && emailValid && !busy && void createAccount()}
               className="bg-card"
             />
           </label>
-          <Button disabled={!emailValid || busy} onClick={createAccount}>
+          <Button disabled={!emailValid || busy} onClick={() => void createAccount()}>
             {t('auth.createPasskey')}
           </Button>
           <Button variant="ghost" disabled={busy} onClick={() => setStep('noPasskey')}>
@@ -171,6 +201,19 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
           cancelLabel={t('editor.cancel')}
           onConfirm={() => void confirmSwitch()}
           onCancel={() => setPending(null)}
+        />
+      )}
+
+      {confirmCreate && (
+        <ConfirmDialog
+          message={t('auth.createDisplaceWarning')}
+          confirmLabel={t('auth.createDisplaceConfirm')}
+          cancelLabel={t('editor.cancel')}
+          onConfirm={() => {
+            setConfirmCreate(false)
+            void runCreate()
+          }}
+          onCancel={() => setConfirmCreate(false)}
         />
       )}
     </div>

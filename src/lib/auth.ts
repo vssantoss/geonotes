@@ -64,23 +64,39 @@ export async function createAccountWithPasskey(email: string): Promise<PendingSi
 }
 
 /**
- * Detects whether applying a sign-in would discard notes belonging to a
- * different account already on this device. The first sync after sign-in does
- * a full pull that removes local notes the new account does not have, so
- * settled (already-synced) notes from the previous account would be lost.
- * Pending notes still waiting in the outbox are not at risk: they are pushed
- * to the new account instead.
+ * Detects whether taking over this device for the given account would discard
+ * notes belonging to a different account already on it. The first sync after
+ * sign-in does a full pull that removes local notes the new account does not
+ * have, so settled (already-synced) notes from the previous account would be
+ * lost. Pending notes still waiting in the outbox are not at risk: they are
+ * pushed to the new account instead.
  *
- * @param pending - the verified sign-in about to be applied.
+ * Works from the e-mail alone so both signing in and creating a new account can
+ * warn before anything is applied (account creation checks this up front, before
+ * registering the passkey, so cancelling leaves nothing behind).
+ *
+ * @param email - the account about to take over this device.
  * @returns true when the previous account's settled notes would be removed and
- *          the switch should be confirmed; false when it is safe.
+ *          the action should be confirmed; false when it is safe.
  */
-export async function pendingAccountSwitch(pending: PendingSignIn): Promise<boolean> {
+export async function wouldDisplaceNotes(email: string): Promise<boolean> {
   const ownerHash = await kvGet(KV.notesOwnerHash)
   // No owner recorded, or the same account: nothing is being displaced.
   if (!ownerHash) return false
-  if (ownerHash === (await hashAccount(pending.email))) return false
+  if (ownerHash === (await hashAccount(email))) return false
   return hasSettledNotes()
+}
+
+/**
+ * Whether applying a verified sign-in would displace another account's notes.
+ * Thin wrapper over wouldDisplaceNotes for the usernameless login flow, which
+ * only learns the account e-mail after the ceremony completes.
+ *
+ * @param pending - the verified sign-in about to be applied.
+ * @returns true when the switch should be confirmed; false when it is safe.
+ */
+export async function pendingAccountSwitch(pending: PendingSignIn): Promise<boolean> {
+  return wouldDisplaceNotes(pending.email)
 }
 
 /**

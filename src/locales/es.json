@@ -14,6 +14,8 @@
   "auth.error.accountExists": "Ya existe una cuenta para ese correo.",
   "auth.switchAccountWarning": "Este dispositivo tiene notas de otra cuenta. Iniciar sesión aquí las eliminará de este dispositivo. Seguirán a salvo en esa cuenta.",
   "auth.switchAccountConfirm": "Cambiar y eliminar",
+  "auth.createDisplaceWarning": "Este dispositivo tiene notas de otra cuenta. Crear una cuenta nueva aquí las eliminará de este dispositivo. Seguirán a salvo en la otra cuenta.",
+  "auth.createDisplaceConfirm": "Continuar",
   "auth.signOut": "Cerrar sesión",
   "auth.signOutTitle": "¿Cerrar sesión?",
   "auth.signOutBody": "¿Conservar tus notas en este dispositivo para uso sin conexión o eliminarlas? En ambos casos seguirán en tu cuenta.",
