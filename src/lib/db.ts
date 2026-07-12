@@ -38,6 +38,10 @@ export const KV = {
   sessionToken: 'sessionToken',
   userEmail: 'userEmail',
   syncCursor: 'syncCursor',
+  // When the current run of sync failures began (epoch ms), or absent when the
+  // last sync succeeded. Persisted so the "sync is failing" alert threshold
+  // measures real elapsed time across reloads.
+  syncErrorSince: 'syncErrorSince',
   // Opaque hash of the account whose notes are currently on this device. A
   // hash (not the e-mail) so no personal information of the previous account
   // is left on the device. Kept across a "keep notes" sign-out so the next

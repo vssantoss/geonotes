@@ -1,11 +1,12 @@
 import { useSyncExternalStore } from 'react'
-import { getSyncStatus, subscribeSyncStatus, type SyncStatus } from '../lib/sync'
+import { getSyncSnapshot, subscribeSyncStatus, type SyncSnapshot } from '../lib/sync'
 
 /**
- * Hook exposing the sync engine's live status to the UI.
+ * Hook exposing the sync engine's live snapshot to the UI.
  *
- * @returns 'idle' | 'syncing' | 'error' | 'unauthorized'.
+ * @returns the current status plus `alerting`, true once a sync error has
+ *          persisted long enough to warrant telling the user.
  */
-export function useSyncStatus(): SyncStatus {
-  return useSyncExternalStore(subscribeSyncStatus, getSyncStatus)
+export function useSyncStatus(): SyncSnapshot {
+  return useSyncExternalStore(subscribeSyncStatus, getSyncSnapshot)
 }

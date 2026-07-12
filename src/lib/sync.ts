@@ -5,16 +5,36 @@ import type { Note, SyncOp, SyncRequest, SyncResponse } from '../../shared/types
 /** Sync engine state exposed to the UI. */
 export type SyncStatus = 'idle' | 'syncing' | 'error' | 'unauthorized'
 
+/** Snapshot the UI subscribes to: the raw status plus whether a sync error has
+    persisted long enough to be worth telling the user about. */
+export interface SyncSnapshot {
+  status: SyncStatus
+  alerting: boolean
+}
+
+/** While a sync keeps failing, retry on this cadence so a recovered network or
+    server clears the error on its own, without the user doing anything. */
+const SYNC_ERROR_RETRY_MS = 5 * 60 * 1000
+/** Only surface a sync error to the user once it has been failing this long,
+    so a brief blip never raises a banner. */
+const SYNC_ERROR_ALERT_MS = 2 * 60 * 60 * 1000
+
 let status: SyncStatus = 'idle'
+// When the current run of failures began, or null when the last sync
+// succeeded. Persisted (see KV.syncErrorSince) so the alert threshold measures
+// real elapsed time across reloads.
+let errorSince: number | null = null
+let snapshot: SyncSnapshot = { status, alerting: false }
 const listeners = new Set<() => void>()
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
+let retryTimer: ReturnType<typeof setTimeout> | null = null
 let running = false
 let runAgain = false
 
 /**
- * Subscribes to sync status changes (for React's useSyncExternalStore).
+ * Subscribes to sync snapshot changes (for React's useSyncExternalStore).
  *
- * @param listener - called whenever the status changes.
+ * @param listener - called whenever the snapshot changes.
  * @returns an unsubscribe function.
  */
 export function subscribeSyncStatus(listener: () => void): () => void {
@@ -23,20 +43,68 @@ export function subscribeSyncStatus(listener: () => void): () => void {
 }
 
 /**
- * Returns the current sync status (for React's useSyncExternalStore).
+ * Returns the current sync snapshot (for React's useSyncExternalStore). The
+ * reference only changes when a field changes, so it is safe as a store value.
  */
-export function getSyncStatus(): SyncStatus {
-  return status
+export function getSyncSnapshot(): SyncSnapshot {
+  return snapshot
 }
 
 /**
- * Updates the status and notifies subscribers.
+ * Recomputes the alert flag from the current status and failure age and, when
+ * the snapshot actually changed, publishes a fresh one to subscribers.
+ */
+function recompute(): void {
+  const alerting =
+    status !== 'unauthorized' &&
+    errorSince !== null &&
+    Date.now() - errorSince >= SYNC_ERROR_ALERT_MS
+  if (snapshot.status !== status || snapshot.alerting !== alerting) {
+    snapshot = { status, alerting }
+    for (const l of listeners) l()
+  }
+}
+
+/**
+ * Updates the status and refreshes the published snapshot.
  *
  * @param next - the new status.
  */
 function setStatus(next: SyncStatus): void {
   status = next
-  for (const l of listeners) l()
+  recompute()
+}
+
+/**
+ * Marks the current sync as failed, starting the failure streak (persisted) if
+ * one is not already running, so the alert threshold counts from the first
+ * failure rather than the latest.
+ */
+async function markFailure(): Promise<void> {
+  if (errorSince !== null) return
+  errorSince = Date.now()
+  await kvSet(KV.syncErrorSince, String(errorSince))
+}
+
+/**
+ * Clears the failure streak after a successful (or not-applicable) sync.
+ */
+async function clearFailure(): Promise<void> {
+  if (errorSince === null) return
+  errorSince = null
+  await kvSet(KV.syncErrorSince, null)
+}
+
+/**
+ * Schedules a background retry while a sync is failing, so recovery needs no
+ * user action.
+ */
+function scheduleRetry(): void {
+  if (retryTimer) clearTimeout(retryTimer)
+  retryTimer = setTimeout(() => {
+    retryTimer = null
+    void syncNow()
+  }, SYNC_ERROR_RETRY_MS)
 }
 
 /**
@@ -60,6 +128,11 @@ export async function syncNow(): Promise<void> {
     return
   }
   running = true
+  // A run supersedes any pending retry; a new one is scheduled below if it fails.
+  if (retryTimer) {
+    clearTimeout(retryTimer)
+    retryTimer = null
+  }
   setStatus('syncing')
   try {
     // Addresses matter even without an account (the geocode proxy is public),
@@ -69,6 +142,7 @@ export async function syncNow(): Promise<void> {
     // A session is required for push/pull; without one the app simply stays
     // local-only, mutations accumulating in the outbox until a sign-in.
     if ((await kvGet(KV.sessionToken)) === null) {
+      await clearFailure()
       setStatus('idle')
       return
     }
@@ -91,11 +165,21 @@ export async function syncNow(): Promise<void> {
     const res = await apiFetch<SyncResponse>('/api/sync', req)
 
     await applyPull(res, entries.map((e) => [e.noteId, e.queuedAt]))
+    await clearFailure()
     setStatus('idle')
   } catch (err) {
-    // 401 means the cached session expired server-side: keep local data
-    // usable and let the UI offer a re-login. Anything else retries later.
-    setStatus(err instanceof ApiError && err.status === 401 ? 'unauthorized' : 'error')
+    if (err instanceof ApiError && err.status === 401) {
+      // The cached session expired server-side: a distinct state with its own
+      // re-login prompt, not a "sync is failing" error.
+      await clearFailure()
+      setStatus('unauthorized')
+    } else {
+      // Record the failure and keep retrying in the background; the banner only
+      // appears once the streak is old enough (see recompute).
+      await markFailure()
+      setStatus('error')
+      scheduleRetry()
+    }
   } finally {
     running = false
     if (runAgain) {
@@ -170,5 +254,14 @@ async function applyPull(res: SyncResponse, pushed: [string, number][]): Promise
  */
 export function initSync(): void {
   window.addEventListener('online', () => void syncNow())
-  void syncNow()
+  // Restore any in-progress failure streak so the alert threshold survives a
+  // reload, then run the first sync.
+  void (async () => {
+    const raw = await kvGet(KV.syncErrorSince)
+    if (raw) {
+      errorSince = Number(raw)
+      recompute()
+    }
+    await syncNow()
+  })()
 }

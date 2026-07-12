@@ -19,6 +19,8 @@
   "auth.signOutBody": "Manter suas notas neste dispositivo para uso offline ou removê-las? Em ambos os casos elas continuam na sua conta.",
   "auth.signOutKeep": "Manter neste dispositivo",
   "auth.signOutDelete": "Remover do dispositivo",
+  "auth.signOutUnsyncedBody": "Algumas notas não foram sincronizadas e ainda não estão na sua conta. Mantê-las neste dispositivo ou removê-las mesmo assim e perder as não sincronizadas?",
+  "auth.signOutDeleteAnyway": "Remover mesmo assim",
   "auth.sessionExpired": "Sua sessão expirou. Entre novamente para continuar sincronizando.",
   "gps.acquiring": "Obtendo sua localização…",
   "gps.accuracy": "±{m} m",

@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { MapPin } from 'lucide-react'
-import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { db, KV } from './lib/db'
-import { signOut } from './lib/auth'
+import { hasUnsyncedNotes, signOut } from './lib/auth'
+import { syncNow } from './lib/sync'
 import { useGeolocation } from './hooks/useGeolocation'
 import { useOnline } from './hooks/useOnline'
 import { useSyncStatus } from './hooks/useSyncStatus'
@@ -27,13 +27,16 @@ import { ThemeToggle } from './components/ThemeToggle'
 export default function App() {
   const t = useT()
   const online = useOnline()
-  const syncStatus = useSyncStatus()
+  const sync = useSyncStatus()
   const [editing, setEditing] = useState<EditorTarget | null>(null)
   const [showAuth, setShowAuth] = useState(false)
   // Lives in the shell (not MainScreen) so the GPS watch keeps refining the
   // location while a new note is being written during the refinement window.
   const geo = useGeolocation(editing === null && !showAuth)
   const [confirmSignOut, setConfirmSignOut] = useState(false)
+  // Whether unsynced changes remain when the sign-out dialog opens, so it can
+  // warn that removing notes from the device would lose them.
+  const [signOutUnsynced, setSignOutUnsynced] = useState(false)
   // undefined = still reading IndexedDB, null = signed out. Absent rows must
   // map to null because Dexie resolves get() misses with undefined, which
   // would be indistinguishable from the loading sentinel.
@@ -42,11 +45,20 @@ export default function App() {
 
   /**
    * Begins sign-out. With no notes on the device there is nothing to keep, so
-   * it signs out straight away; otherwise it asks whether to keep them.
+   * it signs out straight away. Otherwise it flushes pending changes first,
+   * then opens the keep/remove dialog, flagging when some notes still could not
+   * sync so the dialog can warn before they are removed.
    */
   const handleSignOut = async () => {
-    if ((await db.notes.count()) === 0) void signOut(false)
-    else setConfirmSignOut(true)
+    if ((await db.notes.count()) === 0) {
+      void signOut(false)
+      return
+    }
+    // Best-effort flush so the warning reflects what genuinely failed to sync,
+    // not changes that simply had not been pushed yet.
+    await syncNow()
+    setSignOutUnsynced(await hasUnsyncedNotes())
+    setConfirmSignOut(true)
   }
 
   if (showAuth) {
@@ -64,16 +76,6 @@ export default function App() {
           <MapPin className="size-5 text-primary" aria-hidden />
           {t('app.name')}
         </h1>
-        {/* Sync indicator only makes sense with an account to sync against. */}
-        {signedIn && (
-          <span
-            className={cn(
-              'mr-1 size-2 rounded-full',
-              !online ? 'bg-muted-foreground' : syncStatus === 'error' ? 'bg-destructive' : 'bg-primary',
-            )}
-            title={!online ? t('sync.offline') : syncStatus === 'syncing' ? t('sync.syncing') : ''}
-          />
-        )}
         <ThemeToggle />
         {/* Hidden until the session read settles so the label never flips. */}
         {token !== undefined && (
@@ -90,7 +92,10 @@ export default function App() {
       {/* Offline is the normal state without an account; only warn about
           pending sync when there is an account to sync with. */}
       {!online && signedIn && <Notice>{t('sync.offline')}</Notice>}
-      {syncStatus === 'unauthorized' && signedIn && (
+      {/* A persistent sync failure (see SYNC_ERROR_ALERT_MS): shown only while
+          online, since offline already has its own banner above. */}
+      {online && signedIn && sync.alerting && <Notice>{t('sync.error')}</Notice>}
+      {sync.status === 'unauthorized' && signedIn && (
         <Notice>
           {t('auth.sessionExpired')}
           <Button variant="outline" size="xs" onClick={() => setShowAuth(true)}>
@@ -115,6 +120,7 @@ export default function App() {
 
       {confirmSignOut && (
         <SignOutDialog
+          unsynced={signOutUnsynced}
           onKeep={() => {
             setConfirmSignOut(false)
             void signOut(true)

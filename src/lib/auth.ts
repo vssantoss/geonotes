@@ -109,6 +109,17 @@ async function hasSettledNotes(): Promise<boolean> {
 }
 
 /**
+ * Reports whether local changes are still waiting to reach the account, i.e.
+ * the outbox is not empty. Used to warn at sign-out that not everything has
+ * synced, so removing the notes from the device would lose them.
+ *
+ * @returns true when at least one note change is unsynced.
+ */
+export async function hasUnsyncedNotes(): Promise<boolean> {
+  return (await db.outbox.count()) > 0
+}
+
+/**
  * Hashes an account e-mail into an opaque, non-reversible identifier, so the
  * device can recognise the same account again without storing the address.
  * The e-mail is lower-cased and trimmed first to match the server's
