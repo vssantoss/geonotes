@@ -20,4 +20,4 @@ ORIGIN = "https://geonotes.pages.dev"
 [[d1_databases]]
 binding = "DB"
 database_name = "geonotes"
-database_id = "REPLACE_WITH_REAL_D1_ID"
+database_id = "0fda6ffd-fc0e-49e1-900a-c421b64309e4"
