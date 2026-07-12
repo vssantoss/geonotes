@@ -116,23 +116,29 @@ export function MainScreen({
       )}
 
       {/* GPS chip rides with the + button: it explains why + is disabled
-          while acquiring and confirms the accuracy once ready or locked. */}
-      <div className="fixed right-[max(1.25rem,env(safe-area-inset-right))] bottom-[max(1.25rem,env(safe-area-inset-bottom))] z-10 flex items-center gap-2.5">
-        <AccuracyBadge fix={fix} location={location} locked={locked} error={error} />
-        <button
-          aria-label={t('main.addNote')}
-          title={location ? t('main.addNote') : t('gps.waitingToAdd')}
-          disabled={!location}
-          onClick={() => location && onAdd(location)}
-          className={cn(
-            'flex size-14 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground',
-            'shadow-lg shadow-primary/25 transition-all active:scale-95',
-            'focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none',
-            'disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100',
-          )}
-        >
-          <Plus className="size-7" aria-hidden />
-        </button>
+          while acquiring and confirms the accuracy once ready or locked.
+          The fixed layer spans the viewport but centers a max-w-xl row so the
+          controls stay inside the app column on wide screens instead of
+          drifting to the window edge. pointer-events are off on the empty band
+          and back on for the button. */}
+      <div className="pointer-events-none fixed inset-x-0 bottom-[max(1.25rem,env(safe-area-inset-bottom))] z-10 flex justify-center">
+        <div className="flex w-full max-w-xl items-center justify-end gap-2.5 pr-[max(1.25rem,env(safe-area-inset-right))] pl-[max(1.25rem,env(safe-area-inset-left))]">
+          <AccuracyBadge fix={fix} location={location} locked={locked} error={error} />
+          <button
+            aria-label={t('main.addNote')}
+            title={location ? t('main.addNote') : t('gps.waitingToAdd')}
+            disabled={!location}
+            onClick={() => location && onAdd(location)}
+            className={cn(
+              'pointer-events-auto flex size-14 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground',
+              'shadow-lg shadow-primary/25 transition-all active:scale-95',
+              'focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none',
+              'disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100',
+            )}
+          >
+            <Plus className="size-7" aria-hidden />
+          </button>
+        </div>
       </div>
     </>
   )
