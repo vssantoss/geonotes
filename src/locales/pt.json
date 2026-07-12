@@ -12,6 +12,8 @@
   "auth.createPasskey": "Criar uma chave de acesso",
   "auth.error.generic": "Algo deu errado. Tente novamente.",
   "auth.error.accountExists": "Já existe uma conta para esse e-mail.",
+  "auth.switchAccountWarning": "Este dispositivo tem notas de outra conta. Entrar aqui vai removê-las deste dispositivo. Elas continuam salvas naquela conta.",
+  "auth.switchAccountConfirm": "Trocar e remover",
   "auth.signOut": "Sair",
   "auth.signOutTitle": "Sair?",
   "auth.signOutBody": "Manter suas notas neste dispositivo para uso offline ou removê-las? Em ambos os casos elas continuam na sua conta.",

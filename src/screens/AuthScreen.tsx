@@ -2,8 +2,15 @@ import { useState } from 'react'
 import { MapPin } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { createAccountWithPasskey, passkeyLogin } from '../lib/auth'
+import {
+  createAccountWithPasskey,
+  finishSignIn,
+  passkeyLogin,
+  pendingAccountSwitch,
+  type PendingSignIn,
+} from '../lib/auth'
 import { ApiError } from '../lib/api'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import { useT } from '../lib/i18n'
 
 type Step = 'start' | 'noPasskey' | 'createEmail'
@@ -15,6 +22,10 @@ type Step = 'start' | 'noPasskey' | 'createEmail'
  * verified yet) and enrolls a passkey. Signing in is optional (the app is fully
  * usable local-only), so the flow can always be left without authenticating.
  *
+ * Signing into an account different from the one whose notes are already on
+ * this device would discard those notes on the first sync, so a confirmation
+ * is shown before the switch is applied.
+ *
  * @param onSignedIn - called once a session is established.
  * @param onCancel - called when the user leaves without signing in.
  */
@@ -24,34 +35,52 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
   const [email, setEmail] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  // A verified ceremony held back because applying it would remove another
+  // account's notes from this device; resolved by the confirmation dialog.
+  const [pending, setPending] = useState<PendingSignIn | null>(null)
 
-  /** Runs an async auth action with busy/error handling around it. */
-  const run = async (action: () => Promise<void>, onError?: (err: unknown) => void) => {
+  /**
+   * Runs a ceremony, then either applies it or, when it would discard another
+   * account's notes, defers to the confirmation dialog.
+   *
+   * @param produce - obtains the verified sign-in (login or account creation).
+   * @param onProduceError - handles a failed ceremony (e.g. no passkey found).
+   */
+  const startFlow = async (
+    produce: () => Promise<PendingSignIn>,
+    onProduceError: (err: unknown) => void,
+  ) => {
     setBusy(true)
     setError(null)
+    let signIn: PendingSignIn
     try {
-      await action()
+      signIn = await produce()
     } catch (err) {
-      if (onError) onError(err)
-      else setError(t('auth.error.generic'))
+      onProduceError(err)
+      setBusy(false)
+      return
+    }
+    try {
+      if (await pendingAccountSwitch(signIn)) {
+        setPending(signIn)
+      } else {
+        await finishSignIn(signIn)
+        onSignedIn()
+      }
+    } catch {
+      setError(t('auth.error.generic'))
     } finally {
       setBusy(false)
     }
   }
 
-  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
-
-  // Attempt a usernameless login; a failed ceremony (no passkey offered or
-  // cancelled) drops to the account-creation offer rather than showing an error.
   const logIn = () =>
-    run(
-      () => passkeyLogin().then(onSignedIn),
-      () => setStep('noPasskey'),
-    )
+    // A failed/absent passkey ceremony drops to the account-creation offer.
+    void startFlow(passkeyLogin, () => setStep('noPasskey'))
 
   const createAccount = () =>
-    run(
-      () => createAccountWithPasskey(email).then(onSignedIn),
+    void startFlow(
+      () => createAccountWithPasskey(email),
       (err) =>
         setError(
           err instanceof ApiError && err.status === 409
@@ -59,6 +88,24 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
             : t('auth.error.generic'),
         ),
     )
+
+  /** Applies the deferred sign-in after the user confirms the account switch. */
+  const confirmSwitch = async () => {
+    if (!pending) return
+    setBusy(true)
+    setError(null)
+    try {
+      await finishSignIn(pending)
+      setPending(null)
+      onSignedIn()
+    } catch {
+      setError(t('auth.error.generic'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 
   return (
     <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center gap-4 p-6">
@@ -71,7 +118,7 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
         <>
           <p className="text-sm text-muted-foreground">{t('auth.subtitle')}</p>
           <p className="text-sm text-muted-foreground">{t('auth.optionalHint')}</p>
-          <Button disabled={busy} onClick={() => void logIn()}>
+          <Button disabled={busy} onClick={logIn}>
             {t('auth.logIn')}
           </Button>
           <Button variant="outline" disabled={busy} onClick={onCancel}>
@@ -102,11 +149,11 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
               autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && emailValid && !busy && void createAccount()}
+              onKeyDown={(e) => e.key === 'Enter' && emailValid && !busy && createAccount()}
               className="bg-card"
             />
           </label>
-          <Button disabled={!emailValid || busy} onClick={() => void createAccount()}>
+          <Button disabled={!emailValid || busy} onClick={createAccount}>
             {t('auth.createPasskey')}
           </Button>
           <Button variant="ghost" disabled={busy} onClick={() => setStep('noPasskey')}>
@@ -116,6 +163,16 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
       )}
 
       {error && <p className="text-sm text-destructive">{error}</p>}
+
+      {pending && (
+        <ConfirmDialog
+          message={t('auth.switchAccountWarning')}
+          confirmLabel={t('auth.switchAccountConfirm')}
+          cancelLabel={t('editor.cancel')}
+          onConfirm={() => void confirmSwitch()}
+          onCancel={() => setPending(null)}
+        />
+      )}
     </div>
   )
 }

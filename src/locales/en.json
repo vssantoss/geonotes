@@ -12,6 +12,8 @@
   "auth.createPasskey": "Create a passkey",
   "auth.error.generic": "Something went wrong. Please try again.",
   "auth.error.accountExists": "An account already exists for that e-mail.",
+  "auth.switchAccountWarning": "This device has notes from a different account. Signing in here will remove them from this device. They stay safe in that account.",
+  "auth.switchAccountConfirm": "Switch and remove",
   "auth.signOut": "Sign out",
   "auth.signOutTitle": "Sign out?",
   "auth.signOutBody": "Keep your notes on this device for offline use, or remove them? They stay in your account either way.",

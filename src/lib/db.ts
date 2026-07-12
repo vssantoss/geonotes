@@ -38,6 +38,11 @@ export const KV = {
   sessionToken: 'sessionToken',
   userEmail: 'userEmail',
   syncCursor: 'syncCursor',
+  // Opaque hash of the account whose notes are currently on this device. A
+  // hash (not the e-mail) so no personal information of the previous account
+  // is left on the device. Kept across a "keep notes" sign-out so the next
+  // sign-in can detect an account switch that would discard those notes.
+  notesOwnerHash: 'notesOwnerHash',
 } as const
 
 /**
