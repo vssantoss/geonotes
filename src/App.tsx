@@ -40,6 +40,15 @@ export default function App() {
   const token = useLiveQuery(async () => (await db.kv.get(KV.sessionToken)) ?? null, [], undefined)
   const signedIn = token !== undefined && token !== null
 
+  /**
+   * Begins sign-out. With no notes on the device there is nothing to keep, so
+   * it signs out straight away; otherwise it asks whether to keep them.
+   */
+  const handleSignOut = async () => {
+    if ((await db.notes.count()) === 0) void signOut(false)
+    else setConfirmSignOut(true)
+  }
+
   if (showAuth) {
     return (
       <div className="mx-auto flex min-h-full w-full max-w-xl flex-col pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)]">
@@ -71,7 +80,7 @@ export default function App() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => (signedIn ? setConfirmSignOut(true) : setShowAuth(true))}
+            onClick={() => (signedIn ? void handleSignOut() : setShowAuth(true))}
           >
             {t(signedIn ? 'auth.signOut' : 'auth.signIn')}
           </Button>
