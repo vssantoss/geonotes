@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { MapPin } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -52,6 +52,27 @@ export function EditorScreen({
       ? { lat: target.note.lat, lng: target.note.lng }
       : // The tap-time fix is the fallback for the moment geo state resets.
         (geo.location ?? target.location)
+
+  // Latest text without re-subscribing the focus listener on every keystroke.
+  const textRef = useRef(text)
+  textRef.current = text
+
+  useEffect(() => {
+    // Returning to an untouched new note re-triggers location acquisition:
+    // bounce back to the main screen (where the GPS re-acquire on focus lives)
+    // so the note starts from a fresh fix instead of a stale one.
+    if (target.kind !== 'new') return
+    const backIfUntouched = () => {
+      if (document.visibilityState !== 'visible') return
+      if (textRef.current.trim() === '') onDone()
+    }
+    window.addEventListener('focus', backIfUntouched)
+    document.addEventListener('visibilitychange', backIfUntouched)
+    return () => {
+      window.removeEventListener('focus', backIfUntouched)
+      document.removeEventListener('visibilitychange', backIfUntouched)
+    }
+  }, [target.kind, onDone])
 
   useEffect(() => {
     // Resolve the address only once the location is locked (it is final at
