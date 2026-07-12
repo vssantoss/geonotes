@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -13,30 +12,38 @@ import { Notice } from '../components/Notice'
 import { EmptyState } from '../components/EmptyState'
 import type { Note } from '../../shared/types'
 
-type ViewMode = 'nearby' | 'all'
+export type ViewMode = 'nearby' | 'all'
 
 /**
  * Home screen: live accuracy badge, the notes list (nearby-first once a fix
  * exists, every note before that) and the floating + button that unlocks
  * when the GPS fix is precise enough.
  *
+ * The nearby/all view is owned by the app shell so it survives leaving for the
+ * editor and coming back; it resets to nearby only on a fresh app launch.
+ *
  * @param geo - geolocation state owned by the app shell.
+ * @param view - the active nearby/all filter.
+ * @param onViewChange - called when the user switches filter.
  * @param onAdd - called with the current fix when the user taps +; the fix
  *   may still refine in the editor until the lock lands.
  * @param onOpen - called with a note when the user taps it.
  */
 export function MainScreen({
   geo,
+  view,
+  onViewChange,
   onAdd,
   onOpen,
 }: {
   geo: GeolocationState
+  view: ViewMode
+  onViewChange: (view: ViewMode) => void
   onAdd: (location: GeoFix) => void
   onOpen: (note: Note) => void
 }) {
   const t = useT()
   const { fix, location, locked, error, retry } = geo
-  const [view, setView] = useState<ViewMode>('nearby')
   const notes = useLiveQuery(() => db.notes.orderBy('updatedAt').reverse().toArray(), [], [])
 
   // Before any fix arrives the app lists everything (spec: list all notes
@@ -65,7 +72,7 @@ export function MainScreen({
             key={mode}
             role="tab"
             aria-selected={view === mode}
-            onClick={() => setView(mode)}
+            onClick={() => onViewChange(mode)}
             className={cn(
               'rounded-full py-1.5 text-sm transition-colors',
               'focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none',

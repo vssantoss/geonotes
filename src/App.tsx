@@ -9,7 +9,7 @@ import { useGeolocation } from './hooks/useGeolocation'
 import { useOnline } from './hooks/useOnline'
 import { useSyncStatus } from './hooks/useSyncStatus'
 import { useT } from './lib/i18n'
-import { MainScreen } from './screens/MainScreen'
+import { MainScreen, type ViewMode } from './screens/MainScreen'
 import { EditorScreen, type EditorTarget } from './screens/EditorScreen'
 import { AuthScreen } from './screens/AuthScreen'
 import { SignOutDialog } from './components/SignOutDialog'
@@ -30,6 +30,10 @@ export default function App() {
   const sync = useSyncStatus()
   const [editing, setEditing] = useState<EditorTarget | null>(null)
   const [showAuth, setShowAuth] = useState(false)
+  // The nearby/all filter lives here (not in MainScreen) so it survives opening
+  // the editor and returning; a fresh app launch remounts App and resets it to
+  // nearby.
+  const [view, setView] = useState<ViewMode>('nearby')
   // Lives in the shell (not MainScreen) so the GPS watch keeps refining the
   // location while a new note is being written during the refinement window.
   const geo = useGeolocation(editing === null && !showAuth)
@@ -109,6 +113,8 @@ export default function App() {
       ) : (
         <MainScreen
           geo={geo}
+          view={view}
+          onViewChange={setView}
           onAdd={(location) => setEditing({ kind: 'new', location })}
           onOpen={(note) => setEditing({ kind: 'edit', note })}
         />
