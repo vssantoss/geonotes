@@ -5,12 +5,12 @@ import { Textarea } from '@/components/ui/textarea'
 import { createNote, deleteNote, updateNoteText } from '../lib/notes'
 import { reverseGeocode } from '../lib/api'
 import { renderBold } from '../lib/bold'
-import { useT } from '../lib/i18n'
+import { useT, detectLocale } from '../lib/i18n'
 import { useOnline } from '../hooks/useOnline'
 import { CharCounter } from '../components/CharCounter'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import type { GeolocationState } from '../hooks/useGeolocation'
-import type { GeoFix } from '../lib/geo'
+import { formatDistance, type GeoFix } from '../lib/geo'
 import { NOTE_MAX_LENGTH, type Note } from '../../shared/types'
 
 /** Editor target: an existing note, or a new one at the fix + was tapped on. */
@@ -121,7 +121,7 @@ export function EditorScreen({
             {updating
               ? t('editor.locationUpdating')
               : t('editor.locationLocked', {
-                  m: Math.round((geo.location ?? target.location).accuracy),
+                  d: formatDistance((geo.location ?? target.location).accuracy, detectLocale()),
                 })}
           </span>
         )}

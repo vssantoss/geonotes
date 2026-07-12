@@ -1,7 +1,7 @@
 import { LocateFixed, LocateOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useT } from '../lib/i18n'
-import type { GeoFix } from '../lib/geo'
+import { useT, detectLocale } from '../lib/i18n'
+import { formatDistance, type GeoFix } from '../lib/geo'
 
 /**
  * Compact GPS instrument chip, docked next to the + button. Shows a pulsing
@@ -28,6 +28,10 @@ export function AccuracyBadge({
   error: 'denied' | 'unavailable' | 'timeout' | null
 }) {
   const t = useT()
+  const locale = detectLocale()
+  // Accuracy shown in the locale's units (feet for imperial, meters for
+  // metric); formatDistance rounds, so raw meters can be passed straight in.
+  const accuracy = (meters: number) => t('gps.accuracy', { d: formatDistance(meters, locale) })
   const base =
     'inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium shadow-md'
 
@@ -50,11 +54,11 @@ export function AccuracyBadge({
       <span
         className={cn(base, 'border-primary/40 bg-accent text-accent-foreground')}
         title={t('gps.locked')}
-        aria-label={`${t('gps.locked')} ${t('gps.accuracy', { m: Math.round(location.accuracy) })}`}
+        aria-label={`${t('gps.locked')} ${accuracy(location.accuracy)}`}
       >
         <LocateFixed className="size-3.5 text-primary" aria-hidden />
         <span className="font-mono text-primary">
-          {t('gps.accuracy', { m: Math.round(location.accuracy) })}
+          {accuracy(location.accuracy)}
         </span>
       </span>
     )
@@ -65,7 +69,7 @@ export function AccuracyBadge({
       <span
         className={cn(base, 'border-primary/40 bg-accent text-accent-foreground')}
         title={t('gps.refining')}
-        aria-label={`${t('gps.refining')} ${t('gps.accuracy', { m: Math.round(location.accuracy) })}`}
+        aria-label={`${t('gps.refining')} ${accuracy(location.accuracy)}`}
       >
         {/* Pulsing dot: notes can be added, but the fix is still refining. */}
         <span className="relative flex size-2" aria-hidden>
@@ -73,7 +77,7 @@ export function AccuracyBadge({
           <span className="relative inline-flex size-2 rounded-full bg-primary" />
         </span>
         <span className="font-mono text-primary">
-          {t('gps.accuracy', { m: Math.round(location.accuracy) })}
+          {accuracy(location.accuracy)}
         </span>
       </span>
     )
@@ -90,7 +94,7 @@ export function AccuracyBadge({
         <span className="relative inline-flex size-2 rounded-full bg-primary" />
       </span>
       {fix ? (
-        <span className="font-mono">{t('gps.accuracy', { m: Math.round(fix.accuracy) })}</span>
+        <span className="font-mono">{accuracy(fix.accuracy)}</span>
       ) : (
         t('gps.acquiring')
       )}

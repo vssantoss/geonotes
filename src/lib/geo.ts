@@ -86,12 +86,38 @@ export function nearbyRadiusMeters(accuracy: number): number {
   return Math.max(NEARBY_MIN_RADIUS_M, accuracy)
 }
 
+/** Meters per foot, for imperial conversion. */
+const FEET_PER_METER = 3.28084
+/** Feet per mile. */
+const FEET_PER_MILE = 5280
+
 /**
- * Formats a distance for display, switching to km past 1000 m.
+ * Whether a locale displays distances in imperial units (feet/miles). Per
+ * product spec English and Spanish use imperial; Portuguese uses metric.
  *
- * @returns e.g. "12 m" or "3.4 km".
+ * @param locale - the active UI locale ('en' | 'es' | 'pt').
+ * @returns true for imperial locales, false for metric ones.
  */
-export function formatDistance(meters: number): string {
+function isImperialLocale(locale: string): boolean {
+  return locale !== 'pt'
+}
+
+/**
+ * Formats a distance for display in the locale's unit system: feet then miles
+ * for imperial locales (English/Spanish), meters then kilometers for metric
+ * ones (Portuguese). The unit follows the locale rather than the value so a
+ * list of notes stays in one system.
+ *
+ * @param meters - the distance in meters.
+ * @param locale - the active UI locale ('en' | 'es' | 'pt').
+ * @returns e.g. "98 ft" / "1.3 mi" (imperial) or "12 m" / "3.4 km" (metric).
+ */
+export function formatDistance(meters: number, locale: string): string {
+  if (isImperialLocale(locale)) {
+    const feet = meters * FEET_PER_METER
+    if (feet < FEET_PER_MILE) return `${Math.round(feet)} ft`
+    return `${(feet / FEET_PER_MILE).toFixed(1)} mi`
+  }
   if (meters < 1000) return `${Math.round(meters)} m`
   return `${(meters / 1000).toFixed(1)} km`
 }

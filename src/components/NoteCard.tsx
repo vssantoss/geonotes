@@ -50,7 +50,7 @@ export function NoteCard({
           {here && <MapPin className="size-3.5 shrink-0 text-primary" aria-hidden />}
           {distance !== null && (
             <span className="shrink-0 font-mono font-medium text-primary">
-              {formatDistance(distance)}
+              {formatDistance(distance, detectLocale())}
             </span>
           )}
           <span className="truncate">

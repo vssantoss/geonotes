@@ -30,11 +30,22 @@ describe('nearbyRadiusMeters', () => {
 })
 
 describe('formatDistance', () => {
-  it('formats meters below 1 km', () => {
-    expect(formatDistance(12.4)).toBe('12 m')
+  it('formats meters below 1 km for metric locales', () => {
+    expect(formatDistance(12.4, 'pt')).toBe('12 m')
   })
 
-  it('formats kilometers above 1 km', () => {
-    expect(formatDistance(3400)).toBe('3.4 km')
+  it('formats kilometers above 1 km for metric locales', () => {
+    expect(formatDistance(3400, 'pt')).toBe('3.4 km')
+  })
+
+  it('formats feet below a mile for imperial locales', () => {
+    // 3.05 m ~ 10 ft.
+    expect(formatDistance(3.05, 'en')).toBe('10 ft')
+    expect(formatDistance(3.05, 'es')).toBe('10 ft')
+  })
+
+  it('formats miles past a mile for imperial locales', () => {
+    // 3218 m ~ 2.0 mi.
+    expect(formatDistance(3218, 'en')).toBe('2.0 mi')
   })
 })
