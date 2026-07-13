@@ -12,6 +12,7 @@ import { useT } from './lib/i18n'
 import { MainScreen, type ViewMode } from './screens/MainScreen'
 import { EditorScreen, type EditorTarget } from './screens/EditorScreen'
 import { AuthScreen } from './screens/AuthScreen'
+import { AccountMenu } from './components/AccountMenu'
 import { SignOutDialog } from './components/SignOutDialog'
 import { Notice } from './components/Notice'
 import { ThemeToggle } from './components/ThemeToggle'
@@ -81,15 +82,13 @@ export default function App() {
           {t('app.name')}
         </h1>
         <ThemeToggle />
-        {/* Hidden until the session read settles so the label never flips. */}
+        {/* Hidden until the session read settles so the badge never flips. */}
         {token !== undefined && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => (signedIn ? void handleSignOut() : setShowAuth(true))}
-          >
-            {t(signedIn ? 'auth.signOut' : 'auth.signIn')}
-          </Button>
+          <AccountMenu
+            signedIn={signedIn}
+            onSignIn={() => setShowAuth(true)}
+            onSignOut={() => void handleSignOut()}
+          />
         )}
       </header>
 

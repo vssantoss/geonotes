@@ -24,6 +24,7 @@
   "auth.signOutUnsyncedBody": "Some notes haven't synced and aren't in your account yet. Keep them on this device, or remove them anyway and lose the unsynced ones?",
   "auth.signOutDeleteAnyway": "Remove anyway",
   "auth.sessionExpired": "Your session expired. Sign in again to keep syncing.",
+  "account.menu": "Account menu",
   "gps.acquiring": "Getting your location…",
   "gps.accuracy": "±{d}",
   "gps.locked": "Location locked",

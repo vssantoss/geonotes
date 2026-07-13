@@ -24,6 +24,7 @@
   "auth.signOutUnsyncedBody": "Algunas notas no se han sincronizado y aún no están en tu cuenta. ¿Conservarlas en este dispositivo o eliminarlas de todos modos y perder las no sincronizadas?",
   "auth.signOutDeleteAnyway": "Eliminar de todos modos",
   "auth.sessionExpired": "Tu sesión caducó. Inicia sesión de nuevo para seguir sincronizando.",
+  "account.menu": "Menú de la cuenta",
   "gps.acquiring": "Obteniendo tu ubicación…",
   "gps.accuracy": "±{d}",
   "gps.locked": "Ubicación fijada",
