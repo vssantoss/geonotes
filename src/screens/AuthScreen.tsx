@@ -200,13 +200,23 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
           <Button disabled={!emailValid || busy} onClick={() => void createAccount()}>
             {t('auth.createPasskey')}
           </Button>
-          <Button variant="ghost" disabled={busy} onClick={() => setStep('noPasskey')}>
+          <Button
+            variant="ghost"
+            disabled={busy}
+            // Leaving the create page resets it: clear the typed e-mail and any
+            // error so returning starts fresh rather than pre-filled.
+            onClick={() => {
+              setEmail('')
+              setError(null)
+              setStep('noPasskey')
+            }}
+          >
             {t('auth.back')}
           </Button>
         </>
       )}
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && <p className="text-center text-sm text-destructive">{error}</p>}
 
       {pending && (
         <ConfirmDialog
