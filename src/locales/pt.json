@@ -11,6 +11,7 @@
   "auth.back": "Voltar",
   "auth.createPasskey": "Criar uma chave de acesso",
   "auth.error.generic": "Algo deu errado. Tente novamente.",
+  "auth.error.passkeyNotRecognized": "Essa chave de acesso não está vinculada a nenhuma conta. Tente novamente ou crie uma conta nova.",
   "auth.error.accountExists": "Já existe uma conta para esse e-mail.",
   "auth.switchAccountWarning": "Este dispositivo tem notas de outra conta. Entrar aqui vai removê-las deste dispositivo. Elas continuam salvas naquela conta.",
   "auth.switchAccountConfirm": "Trocar e remover",

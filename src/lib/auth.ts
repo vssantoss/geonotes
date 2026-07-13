@@ -18,20 +18,38 @@ export interface PendingSignIn {
 }
 
 /**
+ * Thrown when the browser passkey ceremony itself does not produce a
+ * credential: none exists for this site, or the user dismissed the prompt.
+ * Distinguished from server/network failures so the UI only offers account
+ * creation when the device really has no usable passkey.
+ */
+export class PasskeyUnavailableError extends Error {
+  constructor(cause: unknown) {
+    super('passkey ceremony failed', { cause })
+  }
+}
+
+/**
  * Signs in with a passkey, usernameless: the browser offers any passkey it
  * holds for this site and the server identifies the account from it, so no
  * e-mail is typed. Does not establish the session; the caller applies it with
  * finishSignIn once any account-switch confirmation has passed.
  *
  * @returns the verified sign-in, including the account e-mail for the UI.
- * @throws when no passkey is available or the ceremony is cancelled/fails.
+ * @throws PasskeyUnavailableError when no passkey is available or the ceremony
+ *         is cancelled; ApiError when the server rejects the sign-in.
  */
 export async function passkeyLogin(): Promise<PendingSignIn> {
   const { options, challengeToken } = await apiFetch<{
     options: PublicKeyCredentialRequestOptionsJSON
     challengeToken: string
   }>('/api/auth/passkey-login-options', {})
-  const response = await startAuthentication({ optionsJSON: options })
+  let response: Awaited<ReturnType<typeof startAuthentication>>
+  try {
+    response = await startAuthentication({ optionsJSON: options })
+  } catch (err) {
+    throw new PasskeyUnavailableError(err)
+  }
   const out = await apiFetch<{ token: string; email: string }>('/api/auth/passkey-login', {
     response,
     challengeToken,

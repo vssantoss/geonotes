@@ -6,6 +6,7 @@ import {
   createAccountWithPasskey,
   finishSignIn,
   passkeyLogin,
+  PasskeyUnavailableError,
   pendingAccountSwitch,
   wouldDisplaceNotes,
   type PendingSignIn,
@@ -79,8 +80,21 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
   }
 
   const logIn = () =>
-    // A failed/absent passkey ceremony drops to the account-creation offer.
-    void startFlow(passkeyLogin, () => setStep('noPasskey'))
+    // Only a failed/absent passkey ceremony drops to the account-creation
+    // offer. A completed ceremony the server rejects (or a network failure)
+    // shows an error instead: the user does have a passkey, so offering to
+    // create an account would be misleading.
+    void startFlow(passkeyLogin, (err) => {
+      if (err instanceof PasskeyUnavailableError) {
+        setStep('noPasskey')
+      } else {
+        setError(
+          err instanceof ApiError && err.status === 401
+            ? t('auth.error.passkeyNotRecognized')
+            : t('auth.error.generic'),
+        )
+      }
+    })
 
   /**
    * Starts account creation. The target e-mail is known up front, so it first

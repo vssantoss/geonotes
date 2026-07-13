@@ -11,6 +11,7 @@
   "auth.back": "Back",
   "auth.createPasskey": "Create a passkey",
   "auth.error.generic": "Something went wrong. Please try again.",
+  "auth.error.passkeyNotRecognized": "That passkey isn't linked to an account. Try again, or create a new account.",
   "auth.error.accountExists": "An account already exists for that e-mail.",
   "auth.switchAccountWarning": "This device has notes from a different account. Signing in here will remove them from this device. They stay safe in that account.",
   "auth.switchAccountConfirm": "Switch and remove",
