@@ -89,8 +89,22 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
    * cancelling truly cancels creation). Otherwise it creates straight away.
    */
   const createAccount = async () => {
+    // Lock immediately so a second tap during the async check below cannot
+    // start a competing passkey ceremony (the WebAuthn abort service would
+    // cancel the first one, making the first attempt fail while a retry works).
+    setBusy(true)
     setError(null)
-    if (await wouldDisplaceNotes(email)) {
+    let displaces: boolean
+    try {
+      displaces = await wouldDisplaceNotes(email)
+    } catch {
+      setError(t('auth.error.generic'))
+      setBusy(false)
+      return
+    }
+    if (displaces) {
+      // Hand off to the confirmation dialog, which drives creation on confirm.
+      setBusy(false)
       setConfirmCreate(true)
       return
     }
