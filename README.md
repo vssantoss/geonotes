@@ -46,11 +46,11 @@ pnpm typecheck          # tsc -b across app, node and functions configs
 
 2. Apply migrations remotely: `pnpm wrangler d1 migrations apply geonotes --remote`.
 
-3. Set the auth secret: `pnpm wrangler pages secret put AUTH_SECRET --project-name=geonotes-49a` (any long random string; it signs WebAuthn challenge tokens).
+3. Set the auth secret: `pnpm wrangler pages secret put AUTH_SECRET --project-name=geonotes` (any long random string; it signs WebAuthn challenge tokens).
 
 4. Check `[vars]` in `wrangler.toml`: `RP_ID` must be `gnotes.vshub.app`, `ORIGIN` must be `https://gnotes.vshub.app`, and `ENVIRONMENT` must be `production`.
 
-5. Deploy: `pnpm build && pnpm wrangler pages deploy dist --project-name=geonotes-49a`.
+5. Deploy: `pnpm build && pnpm wrangler pages deploy dist --project-name=geonotes`.
 
 6. Verify the deployment at https://geonotes-49a.pages.dev, then test the application and all passkey ceremonies through the production custom domain at https://gnotes.vshub.app.
 

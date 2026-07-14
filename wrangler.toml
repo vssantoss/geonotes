@@ -2,12 +2,12 @@
 # Victor: after creating the D1 database in the Cloudflare dashboard or via
 # `pnpm wrangler d1 create geonotes`, paste the real database_id below.
 # Also set the challenge-signing secret once (any long random string):
-#   pnpm wrangler pages secret put AUTH_SECRET --project-name=geonotes-49a
+#   pnpm wrangler pages secret put AUTH_SECRET --project-name=geonotes
 # Apply the schema with:
 #   local:  pnpm wrangler d1 migrations apply geonotes --local
 #   remote: pnpm wrangler d1 migrations apply geonotes --remote
 
-name = "geonotes-49a"
+name = "geonotes"
 compatibility_date = "2026-07-01"
 pages_build_output_dir = "dist"
 

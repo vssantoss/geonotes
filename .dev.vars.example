@@ -3,3 +3,6 @@ ENVIRONMENT=dev
 RP_ID=localhost
 ORIGIN=http://localhost:5173
 AUTH_SECRET=dev-only-secret-not-for-production
+# Optional: set a Resend API key to actually e-mail sign-in codes in local dev.
+# Leave unset to log codes to the console instead.
+# RESEND_API_KEY=re_...

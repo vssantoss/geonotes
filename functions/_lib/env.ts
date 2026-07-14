@@ -9,4 +9,10 @@ export interface Env {
   ORIGIN: string
   /** Secret for HMAC-signing WebAuthn challenges (set via `wrangler pages secret put AUTH_SECRET`). */
   AUTH_SECRET: string
+  /**
+   * Resend API key (set via `wrangler pages secret put RESEND_API_KEY`).
+   * When present, sign-in codes are e-mailed via Resend; when absent the code
+   * is logged to the console instead so local dev works without a provider.
+   */
+  RESEND_API_KEY?: string
 }
