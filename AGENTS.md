@@ -10,5 +10,3 @@
 ## Verification
 
 - After implementing, run all testing that does not require spinning up a browser: the test suite, typecheck, build, and any API or function-level checks.
-- Do NOT spin up a browser (headless or otherwise) to test or visually check the app. The user is responsible for in-browser and visual testing.
-- If something can only be verified in a browser, note it after finishing the implementation and let the user run it.
