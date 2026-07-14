@@ -40,17 +40,19 @@ pnpm test               # vitest unit tests (bold parser, GPS lock machine, geo 
 pnpm typecheck          # tsc -b across app, node and functions configs
 ```
 
-## Deploying to Cloudflare
+## Deploying to Cloudflare production
 
 1. Create the database: `pnpm wrangler d1 create geonotes`, then paste the returned `database_id` into `wrangler.toml`.
 
 2. Apply migrations remotely: `pnpm wrangler d1 migrations apply geonotes --remote`.
 
-3. Set the auth secret: `pnpm wrangler pages secret put AUTH_SECRET` (any long random string; it signs WebAuthn challenge tokens).
+3. Set the auth secret: `pnpm wrangler pages secret put AUTH_SECRET --project-name=geonotes-49a` (any long random string; it signs WebAuthn challenge tokens).
 
-4. Check `[vars]` in `wrangler.toml`: `RP_ID` and `ORIGIN` must match the production hostname, `ENVIRONMENT` must not be `dev` in production.
+4. Check `[vars]` in `wrangler.toml`: `RP_ID` must be `gnotes.vshub.app`, `ORIGIN` must be `https://gnotes.vshub.app`, and `ENVIRONMENT` must be `production`.
 
-5. Deploy: `pnpm build && pnpm wrangler pages deploy dist`.
+5. Deploy: `pnpm build && pnpm wrangler pages deploy dist --project-name=geonotes-49a`.
+
+6. Verify the deployment at https://geonotes-49a.pages.dev, then test the application and all passkey ceremonies through the production custom domain at https://gnotes.vshub.app.
 
 Email delivery is stubbed behind the `EmailSender` interface in `functions/_lib/email.ts`. Wire a real provider (MailChannels, Resend, etc.) there before production use, otherwise sign-in codes are only visible in logs.
 
