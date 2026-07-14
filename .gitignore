@@ -1,8 +1,199 @@
+# Dependencies
 node_modules
+.pnp
+.pnp.js
+.pnp.*
+.pnpm-store
+*.tgz
+
+# Build output
 dist
+build
+out
+
+# Cloudflare / Wrangler
 .wrangler
 .dev.vars
+.dev.vars.*
+!.dev.vars.example
+!.dev.vars.*.example
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
 *.local
+
+# Logs
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+*.pid
+*.pid.lock
+*.seed
+
+# Test / coverage output
+coverage
+*.lcov
+.nyc_output
+test-results
+playwright-report
+blob-report
+
+# Caches
+.cache
+.temp
+.tmp
+.eslintcache
+.stylelintcache
+.vite
+.parcel-cache
+.turbo
+*.tsbuildinfo
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# OS files
 .DS_Store
+.DS_Store?
+._*
+.localized
+__MACOSX
+.AppleDouble
+.LSOverride
+.Spotlight-V100
+.DocumentRevisions-V100
+.fseventsd
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# Editors / IDEs
+.idea
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/*.code-snippets
+*.vsix
+*.swp
+*.swo
+*~
+
+# Claude / agent local config
 .claude
+
+# ---------------------------------------------------------------------------
+# Android
+# ---------------------------------------------------------------------------
+# Built application files
+*.apk
+*.aar
+*.ap_
+*.aab
+output-metadata.json
+# Files for the ART/Dalvik VM
+*.dex
+# Java class files
+*.class
+# Generated files
+android/bin
+android/gen
+android/out
+# Gradle
+android/.gradle
+.gradle
+android/build
+**/android/build
+# Local configuration (SDK path, etc.)
+local.properties
+# Android Studio / IntelliJ
+*.iml
+.navigation
+captures
+*.hprof
+# Keystore / signing (never commit secrets)
+*.jks
+*.keystore
+keystore.properties
+key.properties
+signing.properties
+secrets.properties
+!secrets.defaults.properties
+google-services.json
+!google-services.example.json
+# NDK
+obj
+.externalNativeBuild
+.cxx
+.kotlin
+
+# ---------------------------------------------------------------------------
+# iOS / macOS (Xcode)
+# ---------------------------------------------------------------------------
+# Build generated
+ios/build
+DerivedData
+.build
+*.xcarchive
+*.xcresult
+# Various settings
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+xcuserdata
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+*.moved-aside
+# App packaging and debug symbols
+*.ipa
+*.dSYM
+*.dSYM.zip
+*.hmap
+# Playgrounds
+timeline.xctimeline
+playground.xcworkspace
+# CocoaPods
+ios/Pods
+# Carthage
+ios/Carthage/Build
+# fastlane generated output
+ios/fastlane/report.xml
+ios/fastlane/Preview.html
+ios/fastlane/screenshots/**/*.png
+ios/fastlane/test_output
+# Provisioning / signing (never commit secrets)
+*.mobileprovision
+*.provisionprofile
+*.p12
+*.p8
+*.cer
+Secrets.xcconfig
+*.xcconfig.local
+GoogleService-Info.plist
+!GoogleService-Info.example.plist
+
+# ---------------------------------------------------------------------------
+# React Native / Expo (if used for mobile)
+# ---------------------------------------------------------------------------
+.expo
+.expo-shared
+expo-env.d.ts
+web-build
+*.jsbundle
+.xcode.env.local
