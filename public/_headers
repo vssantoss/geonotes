@@ -3,5 +3,6 @@
   Cross-Origin-Opener-Policy: same-origin
   Permissions-Policy: camera=(), geolocation=(self), microphone=(), payment=(), publickey-credentials-create=(self), publickey-credentials-get=(self), usb=()
   Referrer-Policy: no-referrer
+  Strict-Transport-Security: max-age=31536000
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
