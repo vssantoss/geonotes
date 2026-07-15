@@ -8,7 +8,10 @@
 export function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Cache-Control': 'no-store',
+      'Content-Type': 'application/json',
+    },
   })
 }
 
@@ -20,7 +23,13 @@ export function json(data: unknown, status = 200): Response {
  * @returns the Response.
  */
 export function error(status: number, message: string): Response {
-  return new Response(message, { status })
+  return new Response(message, {
+    status,
+    headers: {
+      'Cache-Control': 'no-store',
+      'Content-Type': 'text/plain; charset=UTF-8',
+    },
+  })
 }
 
 /** Thrown by helpers to bubble an HTTP error out of nested calls. */

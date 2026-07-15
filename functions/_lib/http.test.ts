@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { hasTrustedOrigin } from './http'
+import { error, hasTrustedOrigin, json } from './http'
 
 describe('hasTrustedOrigin', () => {
   const expected = 'https://gnotes.vshub.app'
@@ -16,5 +16,12 @@ describe('hasTrustedOrigin', () => {
     })
     expect(hasTrustedOrigin(missing, expected)).toBe(false)
     expect(hasTrustedOrigin(crossOrigin, expected)).toBe(false)
+  })
+})
+
+describe('API cache controls', () => {
+  it('marks JSON and error responses as non-cacheable', () => {
+    expect(json({ ok: true }).headers.get('Cache-Control')).toBe('no-store')
+    expect(error(401, 'unauthorized').headers.get('Cache-Control')).toBe('no-store')
   })
 })
