@@ -232,8 +232,8 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
 
       {step === 'start' && (
         <>
-          <p className="text-sm text-muted-foreground">{t('auth.subtitle')}</p>
-          <p className="text-sm text-muted-foreground">{t('auth.optionalHint')}</p>
+          <p className="text-center text-sm text-muted-foreground">{t('auth.subtitle')}</p>
+          <p className="text-center text-sm text-muted-foreground">{t('auth.optionalHint')}</p>
           <Button disabled={busy} onClick={logIn}>
             {t('auth.logIn')}
           </Button>
@@ -245,7 +245,7 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
 
       {step === 'noPasskey' && (
         <>
-          <p className="text-sm text-muted-foreground">{t('auth.noPasskeyFound')}</p>
+          <p className="text-center text-sm text-muted-foreground">{t('auth.noPasskeyFound')}</p>
           <Button disabled={busy} onClick={() => openEmailStep('create')}>
             {t('auth.createAccount')}
           </Button>
@@ -260,7 +260,7 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
 
       {step === 'email' && (
         <>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-center text-sm text-muted-foreground">
             {t(mode === 'recover' ? 'auth.recoverSubtitle' : 'auth.createSubtitle')}
           </p>
           <label className="flex flex-col gap-1.5 text-sm font-medium">
@@ -292,8 +292,14 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
 
       {step === 'code' && (
         <>
-          <p className="text-sm text-muted-foreground">{t('auth.codeSentTo', { email })}</p>
-          {devCode && <p className="text-sm font-medium text-primary">{t('auth.devCode', { code: devCode })}</p>}
+          <p className="text-center text-sm text-muted-foreground">
+            {t(mode === 'recover' ? 'auth.codeSentToRecover' : 'auth.codeSentTo', { email })}
+          </p>
+          {devCode && (
+            <p className="text-center text-sm font-medium text-primary">
+              {t('auth.devCode', { code: devCode })}
+            </p>
+          )}
           <label className="flex flex-col gap-1.5 text-sm font-medium">
             {t('auth.codeLabel')}
             <Input
