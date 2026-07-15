@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { CircleUserRound, LogIn, LogOut, Settings } from 'lucide-react'
+import { CircleUserRound, Download, LogIn, LogOut, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { kvGet, KV } from '@/lib/db'
 import { useT } from '@/lib/i18n'
+import { usePwaInstall } from '@/hooks/usePwaInstall'
 
 interface AccountMenuProps {
   /** Whether a session is active; switches badge and menu between the signed-in and signed-out variants. */
@@ -39,6 +40,9 @@ export function AccountMenu({ signedIn, onSignIn, onSignOut, onOpenSettings }: A
   // initial. Live so the badge updates the moment a sign-in/out lands in kv.
   const email = useLiveQuery(() => kvGet(KV.userEmail), [], null)
   const initial = email?.trim().charAt(0).toUpperCase()
+  // The PWA install option is offered only while the browser reports the app as
+  // installable (not already installed, supported browser).
+  const { canInstall, promptInstall } = usePwaInstall()
 
   return (
     <DropdownMenu>
@@ -74,6 +78,17 @@ export function AccountMenu({ signedIn, onSignIn, onSignOut, onOpenSettings }: A
           <Settings />
           {t('account.settings')}
         </DropdownMenuItem>
+        {canInstall && (
+          <>
+            <DropdownMenuSeparator />
+            {/* onSelect closes the menu; defer the prompt so it opens after the
+                dropdown's focus/close handling settles. */}
+            <DropdownMenuItem onSelect={() => setTimeout(() => void promptInstall(), 0)}>
+              <Download />
+              {t('account.installApp')}
+            </DropdownMenuItem>
+          </>
+        )}
         <DropdownMenuSeparator />
         {signedIn ? (
           <DropdownMenuItem onSelect={onSignOut}>
