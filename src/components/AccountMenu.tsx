@@ -74,6 +74,7 @@ export function AccountMenu({ signedIn, onSignIn, onSignOut, onOpenSettings }: A
           <Settings />
           {t('account.settings')}
         </DropdownMenuItem>
+        <DropdownMenuSeparator />
         {signedIn ? (
           <DropdownMenuItem onSelect={onSignOut}>
             <LogOut />
