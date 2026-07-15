@@ -141,7 +141,7 @@ export async function syncNow(): Promise<void> {
 
     // A session is required for push/pull; without one the app simply stays
     // local-only, mutations accumulating in the outbox until a sign-in.
-    if ((await kvGet(KV.sessionToken)) === null) {
+    if ((await kvGet(KV.userEmail)) === null) {
       await clearFailure()
       setStatus('idle')
       return

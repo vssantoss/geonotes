@@ -28,6 +28,13 @@ class GeoNotesDb extends Dexie {
       outbox: 'noteId, queuedAt',
       kv: 'key',
     })
+    this.version(2)
+      .stores({
+        notes: 'id, updatedAt',
+        outbox: 'noteId, queuedAt',
+        kv: 'key',
+      })
+      .upgrade((transaction) => transaction.table('kv').delete('sessionToken'))
   }
 }
 
@@ -35,7 +42,6 @@ export const db = new GeoNotesDb()
 
 /** Keys used in the kv table. */
 export const KV = {
-  sessionToken: 'sessionToken',
   userEmail: 'userEmail',
   syncCursor: 'syncCursor',
   // When the current run of sync failures began (epoch ms), or absent when the

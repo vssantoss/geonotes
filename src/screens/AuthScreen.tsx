@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
   confirmEmailCode,
+  cancelPendingSignIn,
   createAccountWithPasskey,
   finishSignIn,
   passkeyLogin,
@@ -96,6 +97,7 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
           onSignedIn()
         }
       } catch {
+        await cancelPendingSignIn()
         setError(t('auth.error.generic'))
       } finally {
         setBusy(false)
@@ -199,6 +201,7 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
       await finishSignIn(await createAccountWithPasskey(email, token))
       onSignedIn()
     } catch {
+      await cancelPendingSignIn()
       setError(t('auth.error.generic'))
       setBusy(false)
     }
@@ -214,6 +217,7 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
       setPending(null)
       onSignedIn()
     } catch {
+      await cancelPendingSignIn()
       setError(t('auth.error.generic'))
     } finally {
       setBusy(false)
@@ -340,7 +344,10 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
           confirmLabel={t('auth.switchAccountConfirm')}
           cancelLabel={t('editor.cancel')}
           onConfirm={() => void confirmSwitch()}
-          onCancel={() => setPending(null)}
+          onCancel={() => {
+            void cancelPendingSignIn()
+            setPending(null)
+          }}
         />
       )}
 

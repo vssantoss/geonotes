@@ -60,5 +60,7 @@ export const onRequestPost = route<Env>(async ({ env, request }) => {
     .bind(verification.authenticationInfo.newCounter, cred.id)
     .run()
 
-  return json({ token: await createSession(env, cred.user_id), email: cred.email })
+  const response = json({ email: cred.email })
+  response.headers.append('Set-Cookie', await createSession(env, cred.user_id, request))
+  return response
 })
