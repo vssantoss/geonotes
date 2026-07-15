@@ -225,7 +225,7 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
 
   return (
     <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center gap-4 p-6">
-      <h1 className="flex items-center gap-2 font-display text-3xl font-bold tracking-tight">
+      <h1 className="flex items-center justify-center gap-2 font-display text-3xl font-bold tracking-tight">
         <MapPin className="size-7 text-primary" aria-hidden />
         {t('app.name')}
       </h1>
