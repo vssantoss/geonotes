@@ -7,7 +7,7 @@ export interface Env {
   RP_ID: string
   /** Full origin the app is served from, for WebAuthn verification. */
   ORIGIN: string
-  /** Secret for HMAC-signing WebAuthn challenges (set via `wrangler pages secret put AUTH_SECRET`). */
+  /** Secret for HMAC-signing enroll tokens (set via `wrangler pages secret put AUTH_SECRET`). */
   AUTH_SECRET: string
   /**
    * Resend API key (set via `wrangler pages secret put RESEND_API_KEY`).

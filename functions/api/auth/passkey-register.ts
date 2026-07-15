@@ -3,7 +3,7 @@ import { isoBase64URL } from '@simplewebauthn/server/helpers'
 import type { RegistrationResponseJSON } from '@simplewebauthn/server'
 import { json, HttpError, route } from '../../_lib/http'
 import { createSession } from '../../_lib/session'
-import { verifyChallenge } from '../../_lib/challenge'
+import { consumeChallenge } from '../../_lib/challenge'
 import { normalizeEmail } from './email-request'
 import type { Env } from '../../_lib/env'
 
@@ -27,7 +27,7 @@ export const onRequestPost = route<Env>(async ({ env, request }) => {
     .first<{ id: string }>()
   if (!user) throw new HttpError(400, 'no pending registration')
 
-  const expectedChallenge = await verifyChallenge(env, body.challengeToken, user.id)
+  const expectedChallenge = await consumeChallenge(env, body.challengeToken, user.id)
   const verification = await verifyRegistrationResponse({
     response: body.response,
     expectedChallenge,

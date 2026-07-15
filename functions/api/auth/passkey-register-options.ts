@@ -1,7 +1,7 @@
 import { generateRegistrationOptions } from '@simplewebauthn/server'
 import type { AuthenticatorTransportFuture } from '@simplewebauthn/server'
 import { json, HttpError, route } from '../../_lib/http'
-import { signChallenge } from '../../_lib/challenge'
+import { createChallenge } from '../../_lib/challenge'
 import { verifyEnrollToken } from '../../_lib/enroll'
 import type { Env } from '../../_lib/env'
 
@@ -42,7 +42,7 @@ export const onRequestPost = route<Env>(async ({ env, request }) => {
     authenticatorSelection: { residentKey: 'required', userVerification: 'preferred' },
   })
 
-  return json({ options, challengeToken: await signChallenge(env, options.challenge, userId) })
+  return json({ options, challengeToken: await createChallenge(env, options.challenge, userId) })
 })
 
 /**

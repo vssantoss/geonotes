@@ -1,6 +1,6 @@
 import { generateAuthenticationOptions } from '@simplewebauthn/server'
 import { json, route } from '../../_lib/http'
-import { signChallenge, PASSKEY_LOGIN_SUBJECT } from '../../_lib/challenge'
+import { createChallenge, PASSKEY_LOGIN_SUBJECT } from '../../_lib/challenge'
 import type { Env } from '../../_lib/env'
 
 /**
@@ -15,5 +15,5 @@ export const onRequestPost = route<Env>(async ({ env }) => {
     userVerification: 'preferred',
   })
 
-  return json({ options, challengeToken: await signChallenge(env, options.challenge, PASSKEY_LOGIN_SUBJECT) })
+  return json({ options, challengeToken: await createChallenge(env, options.challenge, PASSKEY_LOGIN_SUBJECT) })
 })
