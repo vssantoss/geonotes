@@ -1,5 +1,5 @@
 import { json, HttpError, route } from '../../_lib/http'
-import { claimEmailCodeRequest, issueEmailCode } from '../../_lib/email-code'
+import { claimEmailCodeRequest, issueEmailCode, pruneExpiredEmailCodes } from '../../_lib/email-code'
 import { getEmailSender } from '../../_lib/email'
 import { enforceAuthAbuseLimit } from '../../_lib/rate-limit'
 import type { Env } from '../../_lib/env'
@@ -21,14 +21,19 @@ import type { Env } from '../../_lib/env'
  * flow that reveals an address is free (by succeeding), which requires control
  * of the mailbox, so it cannot be used to enumerate other people's accounts.
  */
-export const onRequestPost = route<Env>(async ({ env, request }) => {
+export const onRequestPost = route<Env>(async ({ env, request, waitUntil }) => {
   await enforceAuthAbuseLimit(env, request)
   const body = (await request.json().catch(() => null)) as
     | { email?: unknown; mode?: unknown }
     | null
   const email = normalizeEmail(body?.email)
   const mode = body?.mode === 'recover' ? 'recover' : 'create'
-  const withinAccountLimit = await claimEmailCodeRequest(env, email, Date.now())
+  const now = Date.now()
+  // Opportunistic TTL eviction of expired codes and lapsed rate-limit windows,
+  // amortized onto the same requests that grow those tables. Runs after the
+  // response so it never adds latency, and never affects this request's result.
+  waitUntil(pruneExpiredEmailCodes(env, now))
+  const withinAccountLimit = await claimEmailCodeRequest(env, email, now)
 
   if (mode === 'recover') {
     const account = await env.DB.prepare(

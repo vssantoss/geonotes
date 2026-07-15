@@ -99,6 +99,30 @@ export async function claimEmailCodeAttempt(
 }
 
 /**
+ * Evicts rows that can no longer serve any purpose: expired codes and lapsed
+ * rate-limit windows. Both tables key on the address and are only ever written,
+ * never swept, so without this they grow by one row per distinct address seen
+ * (including typos and abuse) and never shrink. Cheap because both predicates
+ * hit an index (see migration 0004); the deletes remove only stale rows, so
+ * steady-state cost stays proportional to what actually expired since last time.
+ * Best-effort background cleanup: run via waitUntil, off the response path.
+ *
+ * @param env - function environment.
+ * @param now - current epoch timestamp.
+ */
+export async function pruneExpiredEmailCodes(env: Env, now: number): Promise<void> {
+  await env.DB.batch([
+    // A code past expiry can never be validly consumed again.
+    env.DB.prepare('DELETE FROM email_codes WHERE expires_at < ?').bind(now),
+    // A window older than the limit period carries no state: a fresh request
+    // would reset it anyway.
+    env.DB.prepare('DELETE FROM email_code_rate_limits WHERE window_started_at < ?').bind(
+      now - REQUEST_WINDOW_MS,
+    ),
+  ])
+}
+
+/**
  * Consumes a matching code exactly once after its hash has been verified.
  *
  * @param env - function environment.
