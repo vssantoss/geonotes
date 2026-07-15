@@ -1,7 +1,19 @@
-import { db } from './db'
+import { db, KV, kvGet } from './db'
 import { scheduleSync } from './sync'
 import { uuid } from './uuid'
 import { NOTE_MAX_LENGTH, type Note } from '../../shared/types'
+
+/**
+ * Reads the hash of the account that currently owns notes on this device, used
+ * to stamp new outbox entries so a later account switch never uploads them
+ * under the wrong account. Must be called inside a transaction that has db.kv
+ * in scope so the read joins the same transaction.
+ *
+ * @returns the owner hash, or null while local-only (no account yet).
+ */
+async function currentOwner(): Promise<string | null> {
+  return kvGet(KV.notesOwnerHash)
+}
 
 /**
  * Creates a note at a locked location and queues it for sync.
@@ -27,9 +39,9 @@ export async function createNote(
     createdAt: now,
     updatedAt: now,
   }
-  await db.transaction('rw', db.notes, db.outbox, async () => {
+  await db.transaction('rw', db.notes, db.outbox, db.kv, async () => {
     await db.notes.put(note)
-    await db.outbox.put({ noteId: note.id, op: 'upsert', queuedAt: now })
+    await db.outbox.put({ noteId: note.id, op: 'upsert', queuedAt: now, owner: await currentOwner() })
   })
   scheduleSync()
   return note
@@ -43,13 +55,13 @@ export async function createNote(
  */
 export async function updateNoteText(id: string, text: string): Promise<void> {
   const now = Date.now()
-  await db.transaction('rw', db.notes, db.outbox, async () => {
+  await db.transaction('rw', db.notes, db.outbox, db.kv, async () => {
     const changed = await db.notes.update(id, {
       text: text.slice(0, NOTE_MAX_LENGTH),
       updatedAt: now,
     })
     if (changed === 0) return // note was deleted meanwhile
-    await db.outbox.put({ noteId: id, op: 'upsert', queuedAt: now })
+    await db.outbox.put({ noteId: id, op: 'upsert', queuedAt: now, owner: await currentOwner() })
   })
   scheduleSync()
 }
@@ -61,11 +73,11 @@ export async function updateNoteText(id: string, text: string): Promise<void> {
  * @param id - the note id.
  */
 export async function deleteNote(id: string): Promise<void> {
-  await db.transaction('rw', db.notes, db.outbox, async () => {
+  await db.transaction('rw', db.notes, db.outbox, db.kv, async () => {
     await db.notes.delete(id)
     // Replaces any pending upsert for this note: deleting an unsynced note
     // results in a delete op the server treats as a harmless no-op.
-    await db.outbox.put({ noteId: id, op: 'delete', queuedAt: Date.now() })
+    await db.outbox.put({ noteId: id, op: 'delete', queuedAt: Date.now(), owner: await currentOwner() })
   })
   scheduleSync()
 }

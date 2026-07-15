@@ -7,6 +7,7 @@ import type { Env } from '../../_lib/env'
  * Always succeeds; signing out an already-dead session is fine.
  */
 export const onRequestPost = route<Env>(async ({ env, request }) => {
-  await destroySession(env, request)
-  return json({ ok: true })
+  const response = json({ ok: true })
+  response.headers.append('Set-Cookie', await destroySession(env, request))
+  return response
 })

@@ -52,5 +52,7 @@ export const onRequestPost = route<Env>(async ({ env, request }) => {
     )
     .run()
 
-  return json({ token: await createSession(env, user.id) })
+  const response = json({ ok: true })
+  response.headers.append('Set-Cookie', await createSession(env, user.id, request))
+  return response
 })

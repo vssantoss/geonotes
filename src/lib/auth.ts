@@ -3,17 +3,16 @@ import type {
   PublicKeyCredentialCreationOptionsJSON,
   PublicKeyCredentialRequestOptionsJSON,
 } from '@simplewebauthn/browser'
-import { apiFetch, setSessionToken } from './api'
+import { apiFetch } from './api'
 import { db, KV, kvGet, kvSet } from './db'
 import { syncNow } from './sync'
 
 /**
- * A passkey ceremony the server has already verified but that has not been
- * applied locally yet. Held so the caller can confirm a risky account switch
- * (see wouldDisplaceNotes) before finishSignIn establishes the session.
+ * A passkey ceremony the server has verified and placed in an HttpOnly cookie,
+ * but that has not been linked to the local notes yet. Held so the caller can
+ * confirm a risky account switch before finishSignIn applies the local marker.
  */
 export interface PendingSignIn {
-  token: string
   email: string
 }
 
@@ -32,8 +31,8 @@ export class PasskeyUnavailableError extends Error {
 /**
  * Signs in with a passkey, usernameless: the browser offers any passkey it
  * holds for this site and the server identifies the account from it, so no
- * e-mail is typed. Does not establish the session; the caller applies it with
- * finishSignIn once any account-switch confirmation has passed.
+ * e-mail is typed. The server sets the protected cookie, while the caller waits
+ * to apply the local account marker until account-switch confirmation passes.
  *
  * @returns the verified sign-in, including the account e-mail for the UI.
  * @throws PasskeyUnavailableError when no passkey is available or the ceremony
@@ -50,11 +49,11 @@ export async function passkeyLogin(): Promise<PendingSignIn> {
   } catch (err) {
     throw new PasskeyUnavailableError(err)
   }
-  const out = await apiFetch<{ token: string; email: string }>('/api/auth/passkey-login', {
+  const out = await apiFetch<{ email: string }>('/api/auth/passkey-login', {
     response,
     challengeToken,
   })
-  return { token: out.token, email: out.email }
+  return { email: out.email }
 }
 
 /**
@@ -97,8 +96,8 @@ export async function confirmEmailCode(email: string, code: string): Promise<str
 /**
  * Enrolls a passkey for an address whose ownership was just confirmed. Serves
  * both account creation (no account yet) and recovery (adding a passkey to an
- * existing account); the server decides which from the enroll token. Does not
- * establish the session; the caller applies it with finishSignIn.
+ * existing account); the server decides which from the enroll token. The
+ * server sets the protected cookie and finishSignIn applies the local marker.
  *
  * @param email - the confirmed address (used for the account-switch check).
  * @param enrollToken - the token returned by confirmEmailCode.
@@ -115,12 +114,12 @@ export async function createAccountWithPasskey(
     challengeToken: string
   }>('/api/auth/passkey-register-options', { enrollToken })
   const response = await startRegistration({ optionsJSON: options })
-  const out = await apiFetch<{ token: string }>('/api/auth/passkey-register', {
+  await apiFetch<{ ok: boolean }>('/api/auth/passkey-register', {
     email,
     response,
     challengeToken,
   })
-  return { token: out.token, email }
+  return { email }
 }
 
 /**
@@ -148,14 +147,23 @@ export async function wouldDisplaceNotes(email: string): Promise<boolean> {
 }
 
 /**
- * Applies a verified sign-in: stores the session and syncs. Any settled notes
+ * Applies a verified sign-in: stores the local account marker and syncs. Any settled notes
  * from a previous account are reconciled away by that first sync, so callers
  * that care should confirm with wouldDisplaceNotes beforehand.
  *
  * @param pending - the verified sign-in to establish.
  */
 export async function finishSignIn(pending: PendingSignIn): Promise<void> {
-  await establishSession(pending.token, pending.email)
+  await establishSession(pending.email)
+}
+
+/**
+ * Revokes a server session created by a passkey ceremony that was not applied.
+ *
+ * @returns a promise that settles after the best-effort revocation request.
+ */
+export async function cancelPendingSignIn(): Promise<void> {
+  await apiFetch('/api/auth/logout', {}).catch(() => {})
 }
 
 /**
@@ -222,10 +230,8 @@ export async function signOut(keepNotes: boolean): Promise<void> {
       // The device no longer holds any account's notes.
       await kvSet(KV.notesOwnerHash, null)
     }
-    // Clear the account link either way: without a session token the app is in
-    // local-only mode. The sync cursor is account-scoped, so it goes too; a
-    // later sign-in reconciles from scratch.
-    await kvSet(KV.sessionToken, null)
+    // Clear the account link either way. The sync cursor is account-scoped, so
+    // it goes too; a later sign-in reconciles from scratch.
     await kvSet(KV.userEmail, null)
     await kvSet(KV.syncCursor, null)
   })
@@ -235,24 +241,21 @@ export async function signOut(keepNotes: boolean): Promise<void> {
  * Stores the session and immediately syncs so a returning user's notes are
  * downloaded for offline use.
  *
- * @param token - the bearer token issued by the server.
  * @param email - the authenticated address, kept for the passkey flow UI.
  */
-async function establishSession(token: string, email: string): Promise<void> {
-  await setSessionToken(token)
+async function establishSession(email: string): Promise<void> {
+  const ownerHash = await hashAccount(email)
   await kvSet(KV.userEmail, email)
   // Record (as an opaque hash) who owns the notes now on this device so a later
   // sign-in with a different account can warn before the first sync discards
   // them, without leaving the previous account's e-mail on the device.
-  await kvSet(KV.notesOwnerHash, await hashAccount(email))
+  await kvSet(KV.notesOwnerHash, ownerHash)
+  // Claim local-only (ownerless) pending notes for this account: created before
+  // any sign-in, they belong to whoever signs in first. Entries already tagged
+  // to a different account are left untouched, so switching accounts on a device
+  // never relabels and uploads another account's pending operations.
+  await db.outbox.toCollection().modify((entry) => {
+    if (entry.owner === null) entry.owner = ownerHash
+  })
   void syncNow()
-}
-
-/**
- * Reads the stored session token, if any.
- *
- * @returns the token or null when signed out.
- */
-export async function getSessionToken(): Promise<string | null> {
-  return kvGet(KV.sessionToken)
 }

@@ -42,11 +42,13 @@ export default function App() {
   // Whether unsynced changes remain when the sign-out dialog opens, so it can
   // warn that removing notes from the device would lose them.
   const [signOutUnsynced, setSignOutUnsynced] = useState(false)
-  // undefined = still reading IndexedDB, null = signed out. Absent rows must
+  // undefined = still reading IndexedDB, null = signed out. The stored e-mail
+  // is a non-secret local account marker; the credential is an HttpOnly cookie.
+  // Absent rows must
   // map to null because Dexie resolves get() misses with undefined, which
   // would be indistinguishable from the loading sentinel.
-  const token = useLiveQuery(async () => (await db.kv.get(KV.sessionToken)) ?? null, [], undefined)
-  const signedIn = token !== undefined && token !== null
+  const account = useLiveQuery(async () => (await db.kv.get(KV.userEmail)) ?? null, [], undefined)
+  const signedIn = account !== undefined && account !== null
 
   /**
    * Begins sign-out. With no notes on the device there is nothing to keep, so
@@ -83,7 +85,7 @@ export default function App() {
         </h1>
         <ThemeToggle />
         {/* Hidden until the session read settles so the badge never flips. */}
-        {token !== undefined && (
+        {account !== undefined && (
           <AccountMenu
             signedIn={signedIn}
             onSignIn={() => setShowAuth(true)}

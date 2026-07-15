@@ -7,6 +7,13 @@ export interface OutboxEntry {
   noteId: string
   op: 'upsert' | 'delete'
   queuedAt: number
+  // Opaque hash of the account that owns this pending change (see
+  // KV.notesOwnerHash), or null when it was queued local-only before any
+  // sign-in. The sync push only sends entries owned by the account it is
+  // authenticated as, so switching accounts on a device never uploads the
+  // previous account's unsynced notes under the new account. Null entries are
+  // claimed by the first account to sign in.
+  owner: string | null
 }
 
 /** Small key/value rows for session token, sync cursor, user e-mail, etc. */
@@ -28,6 +35,34 @@ class GeoNotesDb extends Dexie {
       outbox: 'noteId, queuedAt',
       kv: 'key',
     })
+    this.version(2)
+      .stores({
+        notes: 'id, updatedAt',
+        outbox: 'noteId, queuedAt',
+        kv: 'key',
+      })
+      .upgrade((transaction) => transaction.table('kv').delete('sessionToken'))
+    // v3 adds OutboxEntry.owner. Existing pending entries can only belong to the
+    // account whose notes are currently on this device, so backfill them with
+    // that owner hash (null when the device is local-only), which the sync push
+    // now uses to avoid uploading them under a different account.
+    this.version(3)
+      .stores({
+        notes: 'id, updatedAt',
+        outbox: 'noteId, queuedAt',
+        kv: 'key',
+      })
+      .upgrade(async (transaction) => {
+        const owner =
+          ((await transaction.table('kv').get('notesOwnerHash')) as KvEntry | undefined)?.value ??
+          null
+        await transaction
+          .table('outbox')
+          .toCollection()
+          .modify((entry: OutboxEntry) => {
+            entry.owner = owner
+          })
+      })
   }
 }
 
@@ -35,7 +70,6 @@ export const db = new GeoNotesDb()
 
 /** Keys used in the kv table. */
 export const KV = {
-  sessionToken: 'sessionToken',
   userEmail: 'userEmail',
   syncCursor: 'syncCursor',
   // When the current run of sync failures began (epoch ms), or absent when the
