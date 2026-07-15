@@ -16,6 +16,10 @@ import {
 import { ApiError } from '../lib/api'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { useT } from '../lib/i18n'
+import { useCooldown } from '../hooks/useCooldown'
+
+/** Mirrors the server's RESEND_COOLDOWN_MS: the minimum gap between code sends. */
+const RESEND_COOLDOWN_MS = 60 * 1000
 
 type Step = 'start' | 'noPasskey' | 'email' | 'code'
 /** Whether the email/code flow creates a fresh account or recovers an existing
@@ -60,6 +64,9 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
   // Set when enrolment is paused because creating/recovering here would remove a
   // different account's notes; confirming runs the actual enrolment.
   const [confirmCreate, setConfirmCreate] = useState(false)
+  // Countdown mirroring the server's per-address resend cooldown, so the resend
+  // button shows when another code can be requested.
+  const resendCooldown = useCooldown(RESEND_COOLDOWN_MS)
 
   /**
    * Runs a passkey login ceremony, then either applies it or, when it would
@@ -135,9 +142,15 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
       const { devCode: dev } = await requestEmailCode(email, mode)
       setDevCode(dev ?? null)
       setStep('code')
+      // A code went out (or, in recover mode, the request was accepted): begin
+      // the resend countdown so the user sees when they can request again.
+      resendCooldown.start()
     } catch (err) {
       if (err instanceof ApiError && err.status === 429) {
+        // A code was already sent within the cooldown; the earlier one is still
+        // valid. Show the countdown so the resend button reflects the wait.
         setStep('code')
+        resendCooldown.start()
       } else {
         setError(t('auth.error.generic'))
       }
@@ -320,8 +333,14 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
           <Button disabled={!codeValid || busy} onClick={() => void submitCode()}>
             {t('auth.createPasskey')}
           </Button>
-          <Button variant="ghost" disabled={busy} onClick={() => void sendCode()}>
-            {t('auth.resendCode')}
+          <Button
+            variant="ghost"
+            disabled={busy || resendCooldown.remainingMs > 0}
+            onClick={() => void sendCode()}
+          >
+            {resendCooldown.remainingMs > 0
+              ? t('auth.resendCodeIn', { s: Math.ceil(resendCooldown.remainingMs / 1000) })
+              : t('auth.resendCode')}
           </Button>
           <Button
             variant="ghost"

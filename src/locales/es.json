@@ -18,6 +18,7 @@
   "auth.codeSentTo": "Introduce el código de 6 dígitos que enviamos a {email}.",
   "auth.codeSentToRecover": "Si tienes una cuenta con {email}, recibirás un código de 6 dígitos. Introdúcelo para continuar.",
   "auth.resendCode": "Reenviar código",
+  "auth.resendCodeIn": "Reenviar código en {s}s",
   "auth.devCode": "Código de desarrollo: {code}",
   "auth.error.badCode": "Ese código es incorrecto o ha caducado. Inténtalo de nuevo.",
   "auth.error.generic": "Algo salió mal. Inténtalo de nuevo.",
