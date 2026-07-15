@@ -117,6 +117,16 @@ export default function App() {
           </Button>
         </Notice>
       )}
+      {/* Revoked from another device: the account marker and notes are already
+          wiped, so this is shown regardless of signedIn (now false). */}
+      {sync.status === 'revoked' && (
+        <Notice>
+          {t('auth.signedOutRemotely')}
+          <Button variant="outline" size="xs" onClick={() => setShowAuth(true)}>
+            {t('auth.signIn')}
+          </Button>
+        </Notice>
+      )}
 
       {editing ? (
         <EditorScreen target={editing} geo={geo} onDone={() => setEditing(null)} />

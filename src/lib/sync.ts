@@ -3,7 +3,13 @@ import { ApiError, apiFetch, reverseGeocode } from './api'
 import type { Note, SyncOp, SyncRequest, SyncResponse } from '../../shared/types'
 
 /** Sync engine state exposed to the UI. */
-export type SyncStatus = 'idle' | 'syncing' | 'error' | 'unauthorized'
+export type SyncStatus = 'idle' | 'syncing' | 'error' | 'unauthorized' | 'revoked'
+
+/** 401 body the server sends when the session was explicitly revoked from
+    another device (see SESSION_REVOKED_REASON in functions/_lib/session.ts).
+    Distinct from a plain expiry: it triggers a full local wipe, not just a
+    re-sign-in prompt. Kept in sync with the server literal by contract. */
+const SESSION_REVOKED_REASON = 'session_revoked'
 
 /** Snapshot the UI subscribes to: the raw status plus whether a sync error has
     persisted long enough to be worth telling the user about. */
@@ -56,9 +62,7 @@ export function getSyncSnapshot(): SyncSnapshot {
  */
 function recompute(): void {
   const alerting =
-    status !== 'unauthorized' &&
-    errorSince !== null &&
-    Date.now() - errorSince >= SYNC_ERROR_ALERT_MS
+    status === 'error' && errorSince !== null && Date.now() - errorSince >= SYNC_ERROR_ALERT_MS
   if (snapshot.status !== status || snapshot.alerting !== alerting) {
     snapshot = { status, alerting }
     for (const l of listeners) l()
@@ -114,6 +118,27 @@ function scheduleRetry(): void {
 export function scheduleSync(): void {
   if (debounceTimer) clearTimeout(debounceTimer)
   debounceTimer = setTimeout(() => void syncNow(), 2000)
+}
+
+/**
+ * Wipes every trace of the account from this device: all notes, the pending
+ * outbox and the account markers (owner hash, e-mail, sync cursor). Makes no
+ * network calls, so it works when the session is already gone server-side.
+ * Used by an explicit "remove from device" sign-out and by a remote revocation,
+ * so a lost or shared device that is signed out from elsewhere drops its local
+ * data on its next contact with the server.
+ */
+export async function wipeLocalAccountData(): Promise<void> {
+  await db.transaction('rw', db.notes, db.outbox, db.kv, async () => {
+    await db.notes.clear()
+    await db.outbox.clear()
+    // No account owns notes on this device anymore.
+    await kvSet(KV.notesOwnerHash, null)
+    // Clear the account link and the account-scoped sync cursor; a later
+    // sign-in reconciles from scratch.
+    await kvSet(KV.userEmail, null)
+    await kvSet(KV.syncCursor, null)
+  })
 }
 
 /**
@@ -179,10 +204,20 @@ export async function syncNow(): Promise<void> {
     setStatus('idle')
   } catch (err) {
     if (err instanceof ApiError && err.status === 401) {
-      // The cached session expired server-side: a distinct state with its own
-      // re-login prompt, not a "sync is failing" error.
       await clearFailure()
-      setStatus('unauthorized')
+      if (err.message === SESSION_REVOKED_REASON) {
+        // Signed out from another device ("sign out other devices" / revoke).
+        // Wipe every trace of the account from this device, then surface the
+        // terminal revoked state. The wipe clears the account marker, so the
+        // shell drops back to signed-out, empty local mode on its own.
+        await wipeLocalAccountData()
+        setStatus('revoked')
+      } else {
+        // The cached session merely expired server-side: a distinct state with
+        // its own re-login prompt, not a "sync is failing" error, and local
+        // notes are kept so a fresh sign-in resumes where the user left off.
+        setStatus('unauthorized')
+      }
     } else {
       // Record the failure and keep retrying in the background; the banner only
       // appears once the streak is old enough (see recompute).

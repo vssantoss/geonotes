@@ -12,10 +12,12 @@ import type { Env } from '../../_lib/env'
 export const onRequestGet = route<Env>(async ({ env, request }) => {
   const userId = await requireUser(env, request)
   const thisHash = await currentSessionHash(request)
+  // Only genuinely active sessions: revoked tombstones and expired rows linger
+  // until swept but must not appear in the list.
   const { results } = await env.DB.prepare(
-    'SELECT id, token_hash, created_at, last_seen, user_agent, expires_at FROM sessions WHERE user_id = ? ORDER BY last_seen DESC',
+    'SELECT id, token_hash, created_at, last_seen, user_agent, expires_at FROM sessions WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ? ORDER BY last_seen DESC',
   )
-    .bind(userId)
+    .bind(userId, Date.now())
     .all<{
       id: string | null
       token_hash: string

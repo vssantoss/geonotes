@@ -9,6 +9,11 @@ const SESSION_COOKIE = '__Host-geonotes_session'
 /** How stale last_seen may get before requireUser refreshes it. Throttled so
     an authenticated request adds a session write at most once per window. */
 const LAST_SEEN_THROTTLE_MS = 15 * 60 * 1000
+/** 401 reason returned when the session was explicitly revoked from another
+    device (not merely expired). The client keys off this exact string to wipe
+    local data rather than just re-prompt sign-in, so it is part of the wire
+    contract with src/lib/sync.ts; keep the two in sync. */
+export const SESSION_REVOKED_REASON = 'session_revoked'
 
 /**
  * Issues a new browser session for a user. Only the token's hash is stored.
@@ -34,15 +39,19 @@ export async function createSession(env: Env, userId: string, request: Request):
     now,
     request.headers.get('User-Agent') ?? null,
   )
+  // Opportunistic sweep of sessions past their expiry (revoked tombstones keep
+  // their original expiry, so this reclaims them too). Piggybacks on the login
+  // write so no separate scheduled job is needed.
+  const evictExpired = env.DB.prepare('DELETE FROM sessions WHERE expires_at < ?').bind(now)
   const previous = readSessionCookie(request)
+  const statements = [evictExpired]
   if (previous) {
-    await env.DB.batch([
+    statements.push(
       env.DB.prepare('DELETE FROM sessions WHERE token_hash = ?').bind(await sha256Hex(previous)),
-      insert,
-    ])
-  } else {
-    await insert.run()
+    )
   }
+  statements.push(insert)
+  await env.DB.batch(statements)
   return buildSessionCookie(token, SESSION_TTL_MS / 1000)
 }
 
@@ -59,11 +68,20 @@ export async function requireUser(env: Env, request: Request): Promise<string> {
   if (!token) throw new HttpError(401, 'missing token')
   const tokenHash = await sha256Hex(token)
   const row = await env.DB.prepare(
-    'SELECT user_id, expires_at, last_seen FROM sessions WHERE token_hash = ?',
+    'SELECT user_id, expires_at, last_seen, revoked_at FROM sessions WHERE token_hash = ?',
   )
     .bind(tokenHash)
-    .first<{ user_id: string; expires_at: number; last_seen: number | null }>()
-  if (!row || row.expires_at < Date.now()) throw new HttpError(401, 'invalid session')
+    .first<{
+      user_id: string
+      expires_at: number
+      last_seen: number | null
+      revoked_at: number | null
+    }>()
+  if (!row) throw new HttpError(401, 'invalid session')
+  // Explicitly revoked from another device: reported distinctly from a plain
+  // expiry so the client wipes local data instead of just re-prompting sign-in.
+  if (row.revoked_at !== null) throw new HttpError(401, SESSION_REVOKED_REASON)
+  if (row.expires_at < Date.now()) throw new HttpError(401, 'invalid session')
   // Refresh last_seen for the sessions list, throttled so most requests skip the
   // write (a stale-by-15-min bound keeps the "last active" time useful cheaply).
   const now = Date.now()
