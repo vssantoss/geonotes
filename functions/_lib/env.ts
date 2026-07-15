@@ -1,6 +1,8 @@
 /** Bindings and variables available to all GeoNotes Pages Functions. */
 export interface Env {
   DB: D1Database
+  /** Secondary abuse-source throttle shared by e-mail authentication routes. */
+  AUTH_RATE_LIMITER: RateLimit
   /** 'dev' enables the e-mail code echo; anything else is production. */
   ENVIRONMENT: string
   /** WebAuthn relying party id: the domain the app is served from. */
