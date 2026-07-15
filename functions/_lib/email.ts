@@ -16,17 +16,15 @@ export interface EmailSender {
   sendCode(to: string, code: string): Promise<void>
 }
 
-/** Stub sender: logs the code. Used in local dev when no RESEND_API_KEY is set. */
+/** Local sender used when the dev response echoes the code to the UI. */
 class DevEmailSender implements EmailSender {
   /**
-   * Logs the code to the Function's console instead of sending e-mail.
+   * Accepts the dev-only delivery without logging the address or code.
    *
    * @param to - recipient e-mail address.
    * @param code - the 6-digit code.
    */
-  async sendCode(to: string, code: string): Promise<void> {
-    console.log(`[email stub] sign-in code for ${to}: ${code}`)
-  }
+  async sendCode(_to: string, _code: string): Promise<void> {}
 }
 
 /** Sends sign-in codes through Resend's REST API. */
@@ -60,24 +58,24 @@ class ResendEmailSender implements EmailSender {
       }),
     })
     if (!res.ok) {
-      // Surface the provider's reason in logs, but keep it out of the response.
-      throw new Error(`Resend send failed (${res.status}): ${await res.text()}`)
+      // Provider response bodies may repeat the recipient, so do not log them.
+      throw new Error(`Resend send failed (${res.status})`)
     }
   }
 }
 
 /**
  * Picks the e-mail sender implementation for the current environment.
- * Uses Resend when an API key is configured, otherwise logs to the console so
- * local development works without a provider.
+ * Uses Resend when an API key is configured. Development may use the no-op
+ * sender because the route echoes the code, while production fails closed.
  *
  * @param env - function environment.
  * @returns the sender.
  */
 export function getEmailSender(env: Env): EmailSender {
-  return env.RESEND_API_KEY
-    ? new ResendEmailSender(env.RESEND_API_KEY)
-    : new DevEmailSender()
+  if (env.RESEND_API_KEY) return new ResendEmailSender(env.RESEND_API_KEY)
+  if (env.ENVIRONMENT === 'dev') return new DevEmailSender()
+  throw new Error('RESEND_API_KEY is required outside development')
 }
 
 /**
