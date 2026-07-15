@@ -39,6 +39,30 @@ if (typeof window !== 'undefined') {
 }
 
 /**
+ * Whether to offer the manual iOS "Add to Home Screen" hint instead of a real
+ * install button. Every browser on iOS is WebKit and never fires
+ * `beforeinstallprompt`, so no programmatic prompt is possible there and the
+ * user must install through the Share menu. Returns true only on iOS while the
+ * app is still running in a browser tab; false on other platforms (they get the
+ * real prompt) and once the app is already installed (launched standalone).
+ *
+ * @returns true when the iOS manual-install instructions should be offered.
+ */
+export function isIosInstallAvailable(): boolean {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false
+  const ua = navigator.userAgent
+  // iPhone/iPod, plus iPadOS which reports as "Macintosh" but is touch-capable.
+  const isIos =
+    /iPhone|iPod|iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)
+  if (!isIos) return false
+  // Already installed and opened from the home screen: nothing left to install.
+  const standalone =
+    (navigator as Navigator & { standalone?: boolean }).standalone === true ||
+    window.matchMedia('(display-mode: standalone)').matches
+  return !standalone
+}
+
+/**
  * Subscribes a component to installable-state changes.
  *
  * @param callback - re-render trigger from useSyncExternalStore.

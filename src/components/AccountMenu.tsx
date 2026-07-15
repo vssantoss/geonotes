@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { CircleUserRound, Download, LogIn, LogOut, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -11,7 +12,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { kvGet, KV } from '@/lib/db'
 import { useT } from '@/lib/i18n'
-import { usePwaInstall } from '@/hooks/usePwaInstall'
+import { usePwaInstall, isIosInstallAvailable } from '@/hooks/usePwaInstall'
+import { IosInstallDialog } from '@/components/IosInstallDialog'
 
 interface AccountMenuProps {
   /** Whether a session is active; switches badge and menu between the signed-in and signed-out variants. */
@@ -43,65 +45,81 @@ export function AccountMenu({ signedIn, onSignIn, onSignOut, onOpenSettings }: A
   // The PWA install option is offered only while the browser reports the app as
   // installable (not already installed, supported browser).
   const { canInstall, promptInstall } = usePwaInstall()
+  // iOS has no automatic prompt, so on iPhone/iPad the same menu item instead
+  // opens manual "Add to Home Screen" instructions. Environment-static, so it is
+  // resolved once. The two are mutually exclusive (canInstall is Chromium-only).
+  const iosInstall = useMemo(() => isIosInstallAvailable(), [])
+  const [showIosInstall, setShowIosInstall] = useState(false)
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="rounded-full"
-          aria-label={t('account.menu')}
-          title={t('account.menu')}
-        >
-          {signedIn && initial ? (
-            <span className="flex size-7 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
-              {initial}
-            </span>
-          ) : (
-            <CircleUserRound className="size-5.5 text-muted-foreground" strokeWidth={1.75} />
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="rounded-full"
+            aria-label={t('account.menu')}
+            title={t('account.menu')}
+          >
+            {signedIn && initial ? (
+              <span className="flex size-7 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+                {initial}
+              </span>
+            ) : (
+              <CircleUserRound className="size-5.5 text-muted-foreground" strokeWidth={1.75} />
+            )}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {signedIn && email && (
+            <>
+              <DropdownMenuLabel className="max-w-60 truncate font-normal text-muted-foreground">
+                {email}
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+            </>
           )}
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        {signedIn && email && (
-          <>
-            <DropdownMenuLabel className="max-w-60 truncate font-normal text-muted-foreground">
-              {email}
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-          </>
-        )}
-        {/* Settings is reachable in both states: it also holds the device-only
-            cosmetic preferences, which apply while signed out. */}
-        <DropdownMenuItem onSelect={onOpenSettings}>
-          <Settings />
-          {t('account.settings')}
-        </DropdownMenuItem>
-        {canInstall && (
-          <>
-            <DropdownMenuSeparator />
-            {/* onSelect closes the menu; defer the prompt so it opens after the
-                dropdown's focus/close handling settles. */}
-            <DropdownMenuItem onSelect={() => setTimeout(() => void promptInstall(), 0)}>
-              <Download />
-              {t('account.installApp')}
+          {/* Settings is reachable in both states: it also holds the device-only
+              cosmetic preferences, which apply while signed out. */}
+          <DropdownMenuItem onSelect={onOpenSettings}>
+            <Settings />
+            {t('account.settings')}
+          </DropdownMenuItem>
+          {(canInstall || iosInstall) && (
+            <>
+              <DropdownMenuSeparator />
+              {/* onSelect closes the menu; defer the action so it runs after the
+                  dropdown's focus/close handling settles. Chromium shows the
+                  native prompt; iOS opens the manual Add-to-Home-Screen steps. */}
+              <DropdownMenuItem
+                onSelect={() =>
+                  setTimeout(() => {
+                    if (canInstall) void promptInstall()
+                    else setShowIosInstall(true)
+                  }, 0)
+                }
+              >
+                <Download />
+                {t('account.installApp')}
+              </DropdownMenuItem>
+            </>
+          )}
+          <DropdownMenuSeparator />
+          {signedIn ? (
+            <DropdownMenuItem onSelect={onSignOut}>
+              <LogOut />
+              {t('auth.signOut')}
             </DropdownMenuItem>
-          </>
-        )}
-        <DropdownMenuSeparator />
-        {signedIn ? (
-          <DropdownMenuItem onSelect={onSignOut}>
-            <LogOut />
-            {t('auth.signOut')}
-          </DropdownMenuItem>
-        ) : (
-          <DropdownMenuItem onSelect={onSignIn}>
-            <LogIn />
-            {t('auth.signIn')}
-          </DropdownMenuItem>
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
+          ) : (
+            <DropdownMenuItem onSelect={onSignIn}>
+              <LogIn />
+              {t('auth.signIn')}
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {showIosInstall && <IosInstallDialog onClose={() => setShowIosInstall(false)} />}
+    </>
   )
 }
