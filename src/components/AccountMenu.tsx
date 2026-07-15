@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { CircleUserRound, LogIn, LogOut } from 'lucide-react'
+import { CircleUserRound, LogIn, LogOut, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -19,6 +19,8 @@ interface AccountMenuProps {
   onSignIn: () => void
   /** Starts the sign-out flow (flush + keep/remove dialog handled by the caller). */
   onSignOut: () => void
+  /** Opens the Settings screen (cosmetic prefs, plus account management when signed in). */
+  onOpenSettings: () => void
 }
 
 /**
@@ -31,7 +33,7 @@ interface AccountMenuProps {
  * @param props - see AccountMenuProps.
  * @returns the badge with its dropdown menu.
  */
-export function AccountMenu({ signedIn, onSignIn, onSignOut }: AccountMenuProps) {
+export function AccountMenu({ signedIn, onSignIn, onSignOut, onOpenSettings }: AccountMenuProps) {
   const t = useT()
   // The signed-in e-mail, shown at the top of the menu and used for the badge
   // initial. Live so the badge updates the moment a sign-in/out lands in kv.
@@ -58,21 +60,25 @@ export function AccountMenu({ signedIn, onSignIn, onSignOut }: AccountMenuProps)
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        {signedIn ? (
+        {signedIn && email && (
           <>
-            {email && (
-              <>
-                <DropdownMenuLabel className="max-w-60 truncate font-normal text-muted-foreground">
-                  {email}
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-              </>
-            )}
-            <DropdownMenuItem onSelect={onSignOut}>
-              <LogOut />
-              {t('auth.signOut')}
-            </DropdownMenuItem>
+            <DropdownMenuLabel className="max-w-60 truncate font-normal text-muted-foreground">
+              {email}
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
           </>
+        )}
+        {/* Settings is reachable in both states: it also holds the device-only
+            cosmetic preferences, which apply while signed out. */}
+        <DropdownMenuItem onSelect={onOpenSettings}>
+          <Settings />
+          {t('account.settings')}
+        </DropdownMenuItem>
+        {signedIn ? (
+          <DropdownMenuItem onSelect={onSignOut}>
+            <LogOut />
+            {t('auth.signOut')}
+          </DropdownMenuItem>
         ) : (
           <DropdownMenuItem onSelect={onSignIn}>
             <LogIn />

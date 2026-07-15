@@ -5,7 +5,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { createNote, deleteNote, updateNoteText } from '../lib/notes'
 import { reverseGeocode } from '../lib/api'
 import { renderBold } from '../lib/bold'
-import { useT, detectLocale } from '../lib/i18n'
+import { useT } from '../lib/i18n'
+import { useUnits } from '../lib/units'
 import { useOnline } from '../hooks/useOnline'
 import { CharCounter } from '../components/CharCounter'
 import { ConfirmDialog } from '../components/ConfirmDialog'
@@ -37,6 +38,7 @@ export function EditorScreen({
   onDone: () => void
 }) {
   const t = useT()
+  const { units } = useUnits()
   const online = useOnline()
   const [text, setText] = useState(target.kind === 'edit' ? target.note.text : '')
   const [confirming, setConfirming] = useState(false)
@@ -121,7 +123,7 @@ export function EditorScreen({
             {updating
               ? t('editor.locationUpdating')
               : t('editor.locationLocked', {
-                  d: formatDistance((geo.location ?? target.location).accuracy, detectLocale()),
+                  d: formatDistance((geo.location ?? target.location).accuracy, units),
                 })}
           </span>
         )}

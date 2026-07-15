@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { registerSW } from 'virtual:pwa-register'
 import App from './App'
 import { I18nProvider } from './lib/i18n'
+import { UnitsProvider } from './lib/units'
 import { ThemeProvider } from './lib/theme'
 import { initSync } from './lib/sync'
 import '@fontsource-variable/bricolage-grotesque/index.css'
@@ -18,7 +19,9 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ThemeProvider>
       <I18nProvider>
-        <App />
+        <UnitsProvider>
+          <App />
+        </UnitsProvider>
       </I18nProvider>
     </ThemeProvider>
   </StrictMode>,

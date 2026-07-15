@@ -55,9 +55,12 @@ function applyDark(dark: boolean) {
 const ThemeContext = createContext<{
   /** Whether dark mode is currently shown, whatever its source. */
   isDark: boolean
-  /** Records an explicit choice, remembered for a month. */
-  setChoice: (choice: ThemeChoice) => void
-}>({ isDark: false, setChoice: () => {} })
+  /** The explicit choice, or null when following the OS ("System"). */
+  choice: ThemeChoice | null
+  /** Records an explicit choice (remembered for a month), or null to clear it
+      and follow the OS again. */
+  setChoice: (choice: ThemeChoice | null) => void
+}>({ isDark: false, choice: null, setChoice: () => {} })
 
 /**
  * Provides the resolved appearance and keeps the document in sync: an explicit
@@ -85,20 +88,27 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return () => query.removeEventListener('change', onChange)
   }, [])
 
-  /** Persists an explicit choice with a one-month expiry and applies it. */
-  const setChoice = (next: ThemeChoice) => {
+  /**
+   * Persists an explicit choice with a one-month expiry and applies it, or
+   * clears the stored choice (null) so the app follows the OS setting again.
+   */
+  const setChoice = (next: ThemeChoice | null) => {
     try {
-      localStorage.setItem(
-        THEME_STORAGE_KEY,
-        JSON.stringify({ value: next, expires: Date.now() + CHOICE_TTL_MS }),
-      )
+      if (next === null) localStorage.removeItem(THEME_STORAGE_KEY)
+      else
+        localStorage.setItem(
+          THEME_STORAGE_KEY,
+          JSON.stringify({ value: next, expires: Date.now() + CHOICE_TTL_MS }),
+        )
     } catch {
       /* storage blocked: the choice lives for this session only */
     }
     setChoiceState(next)
   }
 
-  return <ThemeContext.Provider value={{ isDark, setChoice }}>{children}</ThemeContext.Provider>
+  return (
+    <ThemeContext.Provider value={{ isDark, choice, setChoice }}>{children}</ThemeContext.Provider>
+  )
 }
 
 /**

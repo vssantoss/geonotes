@@ -200,7 +200,7 @@ export async function hasUnsyncedNotes(): Promise<boolean> {
  * @param email - the account e-mail.
  * @returns a hex-encoded SHA-256 digest.
  */
-async function hashAccount(email: string): Promise<string> {
+export async function hashAccount(email: string): Promise<string> {
   const data = new TextEncoder().encode(email.trim().toLowerCase())
   const digest = await crypto.subtle.digest('SHA-256', data)
   return Array.from(new Uint8Array(digest))
