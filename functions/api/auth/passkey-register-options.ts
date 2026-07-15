@@ -2,35 +2,28 @@ import { generateRegistrationOptions } from '@simplewebauthn/server'
 import type { AuthenticatorTransportFuture } from '@simplewebauthn/server'
 import { json, HttpError, route } from '../../_lib/http'
 import { signChallenge } from '../../_lib/challenge'
-import { normalizeEmail } from './email-request'
+import { verifyEnrollToken } from '../../_lib/enroll'
 import type { Env } from '../../_lib/env'
 
 /**
- * POST /api/auth/passkey-register-options {email}: starts creating a new
- * account with a passkey. No session is required: proving control of a fresh
- * authenticator is the registration. The e-mail is recorded for future account
- * recovery (not built yet) but is not verified here.
- *
- * An address that already has a passkey is rejected: since the e-mail is
- * unverified, enrolling onto it would let anyone who knows the address hijack
- * the account. A real owner's recovery path is intentionally deferred.
+ * POST /api/auth/passkey-register-options {enrollToken}: starts enrolling a
+ * passkey onto the address the enroll token vouches for. The token is minted by
+ * /api/auth/email-verify, so the address is always confirmed here; the same
+ * endpoint serves both account creation (no account yet) and recovery (adding a
+ * passkey to an existing account), because proving mailbox ownership authorizes
+ * both. The e-mail is taken from the signed token, never from an untrusted body
+ * field.
  */
 export const onRequestPost = route<Env>(async ({ env, request }) => {
-  const body = (await request.json().catch(() => null)) as { email?: unknown } | null
-  const email = normalizeEmail(body?.email)
+  const body = (await request.json().catch(() => null)) as { enrollToken?: unknown } | null
+  if (typeof body?.enrollToken !== 'string') throw new HttpError(400, 'bad body')
+  const email = await verifyEnrollToken(env, body.enrollToken)
 
+  // Reuse the existing account for recovery, or create it now so the credential
+  // has an owner to attach to.
   const user = await env.DB.prepare('SELECT id FROM users WHERE email = ?')
     .bind(email)
     .first<{ id: string }>()
-  if (user) {
-    const creds = await env.DB.prepare('SELECT count(*) AS n FROM credentials WHERE user_id = ?')
-      .bind(user.id)
-      .first<{ n: number }>()
-    if ((creds?.n ?? 0) > 0) throw new HttpError(409, 'account exists')
-  }
-
-  // Reuse an orphan row (an earlier attempt that never completed a passkey)
-  // or create the account now so the credential has an owner to attach to.
   const userId = user?.id ?? crypto.randomUUID()
   if (!user) {
     await env.DB.prepare('INSERT INTO users (id, email, created_at) VALUES (?, ?, ?)')

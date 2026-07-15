@@ -1,6 +1,6 @@
 import { json, HttpError, route } from '../../_lib/http'
 import { sha256Hex, timingSafeEqual } from '../../_lib/crypto'
-import { createSession } from '../../_lib/session'
+import { signEnrollToken } from '../../_lib/enroll'
 import { normalizeEmail } from './email-request'
 import type { Env } from '../../_lib/env'
 
@@ -8,8 +8,10 @@ import type { Env } from '../../_lib/env'
 const MAX_ATTEMPTS = 5
 
 /**
- * POST /api/auth/email-verify {email, code}: checks the code and issues a
- * session, creating the user account on first sign-in.
+ * POST /api/auth/email-verify {email, code}: checks the sign-in code and, on
+ * success, returns a short-lived enroll token proving the address was verified.
+ * The token authorizes enrolling a passkey (account creation or recovery); it
+ * is NOT a session, so an e-mail code alone never signs anyone in.
  */
 export const onRequestPost = route<Env>(async ({ env, request }) => {
   const body = (await request.json().catch(() => null)) as
@@ -37,26 +39,5 @@ export const onRequestPost = route<Env>(async ({ env, request }) => {
 
   await env.DB.prepare('DELETE FROM email_codes WHERE email = ?').bind(email).run()
 
-  const userId = await findOrCreateUser(env, email)
-  return json({ token: await createSession(env, userId) })
+  return json({ enrollToken: await signEnrollToken(env, email) })
 })
-
-/**
- * Finds the user for an address or creates one (first sign-in is sign-up:
- * with passwordless auth, proving mailbox ownership is the registration).
- *
- * @param env - function environment.
- * @param email - canonicalized address.
- * @returns the user id.
- */
-export async function findOrCreateUser(env: Env, email: string): Promise<string> {
-  const existing = await env.DB.prepare('SELECT id FROM users WHERE email = ?')
-    .bind(email)
-    .first<{ id: string }>()
-  if (existing) return existing.id
-  const id = crypto.randomUUID()
-  await env.DB.prepare('INSERT INTO users (id, email, created_at) VALUES (?, ?, ?)')
-    .bind(id, email, Date.now())
-    .run()
-  return id
-}

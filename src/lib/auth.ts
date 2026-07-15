@@ -10,7 +10,7 @@ import { syncNow } from './sync'
 /**
  * A passkey ceremony the server has already verified but that has not been
  * applied locally yet. Held so the caller can confirm a risky account switch
- * (see pendingAccountSwitch) before finishSignIn establishes the session.
+ * (see wouldDisplaceNotes) before finishSignIn establishes the session.
  */
 export interface PendingSignIn {
   token: string
@@ -58,20 +58,53 @@ export async function passkeyLogin(): Promise<PendingSignIn> {
 }
 
 /**
- * Creates a new account: registers a passkey against the given e-mail. The
- * e-mail is stored for future account recovery. Does not establish the
- * session; the caller applies it with finishSignIn.
+ * Requests a 6-digit confirmation code for an e-mail address, the first step of
+ * both account creation and recovery. The server stores only the code's hash
+ * and e-mails the code; it never signs anyone in on its own.
  *
- * @param email - the address to attach to the new account.
- * @returns the verified sign-in for the new account.
- * @throws ApiError(409) when an account with that e-mail already exists, or
- *         when the browser refuses or the user cancels the ceremony.
+ * @param email - the address to send the code to.
+ * @returns the dev-only echoed code when the server runs in dev mode, so the
+ *          flow is testable without a real inbox; empty in production.
+ * @throws ApiError(429) when a code was requested too recently.
  */
-export async function createAccountWithPasskey(email: string): Promise<PendingSignIn> {
+export async function requestEmailCode(email: string): Promise<{ devCode?: string }> {
+  return apiFetch<{ sent: boolean; devCode?: string }>('/api/auth/email-request', { email })
+}
+
+/**
+ * Confirms a code and obtains a short-lived enroll token proving the address is
+ * owned. The token authorizes enrolling a passkey; it is not a session.
+ *
+ * @param email - the address the code was sent to.
+ * @param code - the 6-digit code the user typed.
+ * @returns the enroll token to pass to createAccountWithPasskey.
+ * @throws ApiError(401) when the code is wrong, expired or exhausted.
+ */
+export async function confirmEmailCode(email: string, code: string): Promise<string> {
+  const out = await apiFetch<{ enrollToken: string }>('/api/auth/email-verify', { email, code })
+  return out.enrollToken
+}
+
+/**
+ * Enrolls a passkey for an address whose ownership was just confirmed. Serves
+ * both account creation (no account yet) and recovery (adding a passkey to an
+ * existing account); the server decides which from the enroll token. Does not
+ * establish the session; the caller applies it with finishSignIn.
+ *
+ * @param email - the confirmed address (used for the account-switch check).
+ * @param enrollToken - the token returned by confirmEmailCode.
+ * @returns the verified sign-in for the account.
+ * @throws ApiError(401) when the enroll token is invalid or expired, or when
+ *         the browser refuses or the user cancels the ceremony.
+ */
+export async function createAccountWithPasskey(
+  email: string,
+  enrollToken: string,
+): Promise<PendingSignIn> {
   const { options, challengeToken } = await apiFetch<{
     options: PublicKeyCredentialCreationOptionsJSON
     challengeToken: string
-  }>('/api/auth/passkey-register-options', { email })
+  }>('/api/auth/passkey-register-options', { enrollToken })
   const response = await startRegistration({ optionsJSON: options })
   const out = await apiFetch<{ token: string }>('/api/auth/passkey-register', {
     email,
@@ -106,21 +139,9 @@ export async function wouldDisplaceNotes(email: string): Promise<boolean> {
 }
 
 /**
- * Whether applying a verified sign-in would displace another account's notes.
- * Thin wrapper over wouldDisplaceNotes for the usernameless login flow, which
- * only learns the account e-mail after the ceremony completes.
- *
- * @param pending - the verified sign-in about to be applied.
- * @returns true when the switch should be confirmed; false when it is safe.
- */
-export async function pendingAccountSwitch(pending: PendingSignIn): Promise<boolean> {
-  return wouldDisplaceNotes(pending.email)
-}
-
-/**
  * Applies a verified sign-in: stores the session and syncs. Any settled notes
  * from a previous account are reconciled away by that first sync, so callers
- * that care should confirm with pendingAccountSwitch beforehand.
+ * that care should confirm with wouldDisplaceNotes beforehand.
  *
  * @param pending - the verified sign-in to establish.
  */
