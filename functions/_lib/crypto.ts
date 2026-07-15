@@ -55,13 +55,18 @@ export function toBase64Url(bytes: Uint8Array): string {
 }
 
 /**
- * Constant-time string comparison (both must be same-alphabet encodings).
+ * Compares two encoded strings using the Workers timing-safe primitive.
  *
+ * @param a - first encoded string.
+ * @param b - second encoded string.
  * @returns true when equal.
  */
 export function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false
-  let diff = 0
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
-  return diff === 0
+  const encoder = new TextEncoder()
+  const left = encoder.encode(a)
+  const right = encoder.encode(b)
+  const lengthsMatch = left.byteLength === right.byteLength
+  return lengthsMatch
+    ? crypto.subtle.timingSafeEqual(left, right)
+    : !crypto.subtle.timingSafeEqual(left, left)
 }
