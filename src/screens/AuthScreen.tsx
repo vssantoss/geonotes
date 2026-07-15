@@ -130,7 +130,7 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
     setCode('')
     setEnrollToken(null)
     try {
-      const { devCode: dev } = await requestEmailCode(email)
+      const { devCode: dev } = await requestEmailCode(email, mode)
       setDevCode(dev ?? null)
       setStep('code')
     } catch (err) {

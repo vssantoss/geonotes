@@ -9,13 +9,32 @@ const CODE_TTL_MS = 10 * 60 * 1000
 const RESEND_COOLDOWN_MS = 60 * 1000
 
 /**
- * POST /api/auth/email-request {email}: generates a 6-digit sign-in code,
- * stores only its hash and hands it to the e-mail sender.
- * In dev mode the code is echoed back so the flow works without a provider.
+ * POST /api/auth/email-request {email, mode?}: generates a 6-digit confirmation
+ * code, stores only its hash and hands it to the e-mail sender. In dev mode the
+ * code is echoed back so the flow works without a provider.
+ *
+ * With mode 'recover', a code is only sent when a recoverable account (a user
+ * with at least one credential) already exists for the address; otherwise
+ * nothing is sent. The response is identical in both cases so the endpoint never
+ * reveals whether an account exists. mode 'create' (the default) always sends,
+ * since creating an account necessarily targets an address without one yet.
  */
 export const onRequestPost = route<Env>(async ({ env, request }) => {
-  const body = (await request.json().catch(() => null)) as { email?: unknown } | null
+  const body = (await request.json().catch(() => null)) as
+    | { email?: unknown; mode?: unknown }
+    | null
   const email = normalizeEmail(body?.email)
+  const mode = body?.mode === 'recover' ? 'recover' : 'create'
+
+  if (mode === 'recover') {
+    const account = await env.DB.prepare(
+      'SELECT 1 AS ok FROM credentials c JOIN users u ON u.id = c.user_id WHERE u.email = ? LIMIT 1',
+    )
+      .bind(email)
+      .first<{ ok: number }>()
+    // No recoverable account: pretend success but send nothing (no enumeration).
+    if (!account) return json({ sent: true })
+  }
 
   const existing = await env.DB.prepare('SELECT expires_at FROM email_codes WHERE email = ?')
     .bind(email)

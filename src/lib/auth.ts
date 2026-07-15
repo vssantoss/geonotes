@@ -62,13 +62,22 @@ export async function passkeyLogin(): Promise<PendingSignIn> {
  * both account creation and recovery. The server stores only the code's hash
  * and e-mails the code; it never signs anyone in on its own.
  *
+ * In 'recover' mode the server only sends a code when an account already exists
+ * for the address (responding identically eitherway), so recovery cannot create
+ * an account and cannot reveal whether one exists.
+ *
  * @param email - the address to send the code to.
- * @returns the dev-only echoed code when the server runs in dev mode, so the
- *          flow is testable without a real inbox; empty in production.
+ * @param mode - 'create' for a new account, 'recover' for an existing one.
+ * @returns the dev-only echoed code when the server runs in dev mode and a code
+ *          was actually sent, so the flow is testable without a real inbox;
+ *          empty in production or when nothing was sent.
  * @throws ApiError(429) when a code was requested too recently.
  */
-export async function requestEmailCode(email: string): Promise<{ devCode?: string }> {
-  return apiFetch<{ sent: boolean; devCode?: string }>('/api/auth/email-request', { email })
+export async function requestEmailCode(
+  email: string,
+  mode: 'create' | 'recover',
+): Promise<{ devCode?: string }> {
+  return apiFetch<{ sent: boolean; devCode?: string }>('/api/auth/email-request', { email, mode })
 }
 
 /**
