@@ -147,7 +147,17 @@ export async function syncNow(): Promise<void> {
       return
     }
 
-    const entries = await db.outbox.orderBy('queuedAt').toArray()
+    // Only push entries the session actually owns. userEmail is set together
+    // with notesOwnerHash by establishSession, after the server has confirmed
+    // the session cookie for that same account, so the cookie in flight always
+    // matches this owner. Entries tagged to a different account (a previous
+    // account's unsynced notes still on the device) are held back rather than
+    // uploaded under the current account. Null-owner entries are local-only
+    // drafts this first sign-in claims.
+    const owner = await kvGet(KV.notesOwnerHash)
+    const entries = (await db.outbox.orderBy('queuedAt').toArray()).filter(
+      (e) => e.owner === owner || e.owner === null,
+    )
     const ops: SyncOp[] = []
     for (const entry of entries) {
       if (entry.op === 'delete') {

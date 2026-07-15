@@ -244,10 +244,18 @@ export async function signOut(keepNotes: boolean): Promise<void> {
  * @param email - the authenticated address, kept for the passkey flow UI.
  */
 async function establishSession(email: string): Promise<void> {
+  const ownerHash = await hashAccount(email)
   await kvSet(KV.userEmail, email)
   // Record (as an opaque hash) who owns the notes now on this device so a later
   // sign-in with a different account can warn before the first sync discards
   // them, without leaving the previous account's e-mail on the device.
-  await kvSet(KV.notesOwnerHash, await hashAccount(email))
+  await kvSet(KV.notesOwnerHash, ownerHash)
+  // Claim local-only (ownerless) pending notes for this account: created before
+  // any sign-in, they belong to whoever signs in first. Entries already tagged
+  // to a different account are left untouched, so switching accounts on a device
+  // never relabels and uploads another account's pending operations.
+  await db.outbox.toCollection().modify((entry) => {
+    if (entry.owner === null) entry.owner = ownerHash
+  })
   void syncNow()
 }
