@@ -18,12 +18,17 @@ export const onRequestPost = route<Env>(async ({ env, request }) => {
 
   const newEmail = await verifyEnrollToken(env, body.enrollToken)
 
-  // Reject an address already owned by a different account. Changing to the
-  // account's own current address is a no-op that still succeeds.
+  // Reject an address already owned by another account, and reject changing to
+  // the account's own current address (a no-op the UI should not allow). E-mail
+  // is unique per user, so a row owned by this user means the address is unchanged.
   const existing = await env.DB.prepare('SELECT id FROM users WHERE email = ?')
     .bind(newEmail)
     .first<{ id: string }>()
-  if (existing && existing.id !== userId) throw new HttpError(409, 'email already in use')
+  if (existing) {
+    throw existing.id === userId
+      ? new HttpError(409, 'email unchanged')
+      : new HttpError(409, 'email already in use')
+  }
 
   await env.DB.prepare('UPDATE users SET email = ? WHERE id = ?').bind(newEmail, userId).run()
 

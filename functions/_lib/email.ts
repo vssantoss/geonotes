@@ -1,14 +1,18 @@
 import type { Env } from './env'
 
-/** The address sign-in codes are sent from. Must be on a Resend-verified domain. */
+/** The address confirmation codes are sent from. Must be on a Resend-verified domain. */
 const MAIL_FROM = 'GeoNotes <gnotes@vshub.app>'
 /** Resend's REST endpoint for sending a single e-mail. */
 const RESEND_ENDPOINT = 'https://api.resend.com/emails'
+/** Hosted app icon used as the email logo (data URIs are blocked by most clients). */
+const LOGO_URL = 'https://gnotes.vshub.app/pwa-192x192.png'
+/** Brand red, taken from the app icon (favicon.svg). */
+const BRAND_RED = '#b91c1c'
 
 /** Delivers sign-in codes. Swap the implementation to wire a real provider. */
 export interface EmailSender {
   /**
-   * Sends a sign-in code to an address.
+   * Sends an e-mail confirmation code to an address.
    *
    * @param to - recipient e-mail address.
    * @param code - the 6-digit code.
@@ -35,8 +39,8 @@ class ResendEmailSender implements EmailSender {
   constructor(private readonly apiKey: string) {}
 
   /**
-   * E-mails a sign-in code via Resend, sending both HTML and plain-text bodies
-   * (the text part improves deliverability and covers text-only clients).
+   * E-mails a confirmation code via Resend, sending both HTML and plain-text
+   * bodies (the text part improves deliverability and covers text-only clients).
    *
    * @param to - recipient e-mail address.
    * @param code - the 6-digit code.
@@ -52,7 +56,7 @@ class ResendEmailSender implements EmailSender {
       body: JSON.stringify({
         from: MAIL_FROM,
         to,
-        subject: `${code} is your GeoNotes sign-in code`,
+        subject: `${code} is your GeoNotes confirmation code`,
         text: codeText(code),
         html: codeHtml(code),
       }),
@@ -79,25 +83,66 @@ export function getEmailSender(env: Env): EmailSender {
 }
 
 /**
- * Builds the plain-text body for a sign-in code e-mail.
+ * Builds the plain-text body for a confirmation-code e-mail.
  *
  * @param code - the 6-digit code.
  * @returns the text body.
  */
 function codeText(code: string): string {
-  return `Your GeoNotes sign-in code is ${code}. It expires in 10 minutes. If you did not request it, you can ignore this e-mail.`
+  return `Your GeoNotes confirmation code is ${code}. Enter it to confirm your e-mail address. It expires in 10 minutes. If you did not request it, you can safely ignore this e-mail.`
 }
 
 /**
- * Builds the HTML body for a sign-in code e-mail.
+ * Builds the HTML body for a confirmation-code e-mail.
+ *
+ * Table-based with inline styles so it renders consistently across e-mail
+ * clients (including Outlook), and pulls the logo from a hosted URL because
+ * most clients block data-URI images.
  *
  * @param code - the 6-digit code.
  * @returns the HTML body.
  */
 function codeHtml(code: string): string {
-  return `<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:420px;margin:0 auto;padding:24px;color:#111">
-  <p style="margin:0 0 16px">Your GeoNotes sign-in code is:</p>
-  <p style="font-size:32px;font-weight:700;letter-spacing:6px;margin:0 0 16px">${code}</p>
-  <p style="margin:0;color:#555;font-size:14px">It expires in 10 minutes. If you did not request it, you can ignore this e-mail.</p>
-</div>`
+  const font = "font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
+  return `<!doctype html>
+<html lang="en">
+<body style="margin:0;padding:0;background:#ffffff;${font}">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;padding:24px 12px">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="440" cellpadding="0" cellspacing="0" style="max-width:440px;width:100%;background:#f4f4f5;border-radius:16px;overflow:hidden;border:1px solid #e4e4e7">
+          <tr>
+            <td align="center" style="padding:32px 24px 8px">
+              <img src="${LOGO_URL}" width="56" height="56" alt="GeoNotes" style="display:block;border:0;border-radius:12px" />
+              <div style="margin-top:12px;color:#18181b;font-size:20px;font-weight:700;letter-spacing:.3px">GeoNotes</div>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:32px 32px 8px;text-align:center">
+              <h1 style="margin:0 0 12px;font-size:20px;font-weight:700;color:#18181b">Confirm your e-mail address</h1>
+              <p style="margin:0;color:#52525b;font-size:15px;line-height:1.5">Enter this code to confirm your e-mail address and continue with GeoNotes:</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:20px 32px 8px">
+              <div style="background:#ffffff;border:1px solid #fecaca;border-radius:12px;padding:20px;text-align:center;font-size:34px;font-weight:700;letter-spacing:10px;color:${BRAND_RED}">${code}</div>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:16px 32px 28px;text-align:center">
+              <p style="margin:0;color:#71717a;font-size:13px;line-height:1.5">This code expires in 10 minutes. If you did not request it, you can safely ignore this e-mail.</p>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:20px 32px 28px;text-align:center;border-top:1px solid #e4e4e7">
+              <div style="color:#71717a;font-size:13px;font-weight:600">GeoNotes</div>
+              <div style="margin-top:4px;color:#a1a1aa;font-size:12px">Your location-pinned notepad</div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`
 }
