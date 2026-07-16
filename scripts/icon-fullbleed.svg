@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <rect width="512" height="512" fill="#b91c1c"/>
-  <!-- Artwork scaled to 86% so it stays inside the maskable safe zone -->
-  <g transform="translate(35.84 35.84) scale(0.86)">
+  <!-- Artwork scaled to 70% so it stays inside the maskable safe zone -->
+  <g transform="translate(76.8 76.8) scale(0.7)">
     <!-- Notepad with a folded corner at the bottom right -->
     <path d="M148 144h216a36 36 0 0 1 36 36v188l-72 72H148a36 36 0 0 1-36-36V180a36 36 0 0 1 36-36z" fill="#fff"/>
     <path d="M328 440v-72h72z" fill="#fecaca"/>
