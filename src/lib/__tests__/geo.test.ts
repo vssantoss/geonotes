@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { distanceMeters, formatDistance, nearbyRadiusMeters, NEARBY_MIN_RADIUS_M } from '../geo'
+import {
+  distanceMeters,
+  formatDistance,
+  localeUnits,
+  nearbyRadiusMeters,
+  NEARBY_MIN_RADIUS_M,
+} from '../geo'
 
 describe('distanceMeters', () => {
   it('is zero for identical points', () => {
@@ -29,23 +35,33 @@ describe('nearbyRadiusMeters', () => {
   })
 })
 
+describe('localeUnits', () => {
+  it('defaults English and Spanish to imperial', () => {
+    expect(localeUnits('en')).toBe('imperial')
+    expect(localeUnits('es')).toBe('imperial')
+  })
+
+  it('defaults Portuguese to metric', () => {
+    expect(localeUnits('pt')).toBe('metric')
+  })
+})
+
 describe('formatDistance', () => {
-  it('formats meters below 1 km for metric locales', () => {
-    expect(formatDistance(12.4, 'pt')).toBe('12 m')
+  it('formats meters below 1 km for the metric system', () => {
+    expect(formatDistance(12.4, 'metric')).toBe('12 m')
   })
 
-  it('formats kilometers above 1 km for metric locales', () => {
-    expect(formatDistance(3400, 'pt')).toBe('3.4 km')
+  it('formats kilometers above 1 km for the metric system', () => {
+    expect(formatDistance(3400, 'metric')).toBe('3.4 km')
   })
 
-  it('formats feet below a mile for imperial locales', () => {
+  it('formats feet below a mile for the imperial system', () => {
     // 3.05 m ~ 10 ft.
-    expect(formatDistance(3.05, 'en')).toBe('10 ft')
-    expect(formatDistance(3.05, 'es')).toBe('10 ft')
+    expect(formatDistance(3.05, 'imperial')).toBe('10 ft')
   })
 
-  it('formats miles past a mile for imperial locales', () => {
+  it('formats miles past a mile for the imperial system', () => {
     // 3218 m ~ 2.0 mi.
-    expect(formatDistance(3218, 'en')).toBe('2.0 mi')
+    expect(formatDistance(3218, 'imperial')).toBe('2.0 mi')
   })
 })

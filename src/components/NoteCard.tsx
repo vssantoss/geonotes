@@ -2,7 +2,8 @@ import { MapPin } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { renderBold } from '../lib/bold'
 import { formatDistance } from '../lib/geo'
-import { detectLocale } from '../lib/i18n'
+import { useLocale } from '../lib/i18n'
+import { useUnits } from '../lib/units'
 import type { Note } from '../../shared/types'
 
 /**
@@ -26,7 +27,9 @@ export function NoteCard({
   here: boolean
   onClick: () => void
 }) {
-  const updated = new Date(note.updatedAt).toLocaleDateString(detectLocale(), {
+  const { locale } = useLocale()
+  const { units } = useUnits()
+  const updated = new Date(note.updatedAt).toLocaleDateString(locale, {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
@@ -50,7 +53,7 @@ export function NoteCard({
           {here && <MapPin className="size-3.5 shrink-0 text-primary" aria-hidden />}
           {distance !== null && (
             <span className="shrink-0 font-mono font-medium text-primary">
-              {formatDistance(distance, detectLocale())}
+              {formatDistance(distance, units)}
             </span>
           )}
           <span className="truncate">

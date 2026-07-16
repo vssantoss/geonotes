@@ -9,6 +9,8 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 const publicDir = path.join(here, '..', 'public')
 const rounded = path.join(publicDir, 'favicon.svg')
 const fullbleed = path.join(here, 'icon-fullbleed.svg')
+// iOS needs no maskable safe-zone shrink, so its icon keeps the artwork at full size.
+const apple = path.join(here, 'icon-apple.svg')
 
 /** [source svg, output name, size] for every icon the manifest references. */
 const outputs = [
@@ -16,7 +18,7 @@ const outputs = [
   [rounded, 'pwa-512x512.png', 512],
   // Maskable icons must fill the whole square; the OS applies its own mask.
   [fullbleed, 'maskable-icon-512x512.png', 512],
-  [fullbleed, 'apple-touch-icon-180x180.png', 180],
+  [apple, 'apple-touch-icon-180x180.png', 180],
 ]
 
 for (const [src, name, size] of outputs) {

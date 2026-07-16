@@ -1,6 +1,7 @@
 import { LocateFixed, LocateOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useT, detectLocale } from '../lib/i18n'
+import { useT } from '../lib/i18n'
+import { useUnits } from '../lib/units'
 import { formatDistance, type GeoFix } from '../lib/geo'
 
 /**
@@ -28,10 +29,10 @@ export function AccuracyBadge({
   error: 'denied' | 'unavailable' | 'timeout' | null
 }) {
   const t = useT()
-  const locale = detectLocale()
-  // Accuracy shown in the locale's units (feet for imperial, meters for
-  // metric); formatDistance rounds, so raw meters can be passed straight in.
-  const accuracy = (meters: number) => t('gps.accuracy', { d: formatDistance(meters, locale) })
+  const { units } = useUnits()
+  // Accuracy shown in the chosen units (feet for imperial, meters for metric);
+  // formatDistance rounds, so raw meters can be passed straight in.
+  const accuracy = (meters: number) => t('gps.accuracy', { d: formatDistance(meters, units) })
   const base =
     'inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium shadow-md'
 

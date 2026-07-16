@@ -12,10 +12,10 @@ import { useT } from './lib/i18n'
 import { MainScreen, type ViewMode } from './screens/MainScreen'
 import { EditorScreen, type EditorTarget } from './screens/EditorScreen'
 import { AuthScreen } from './screens/AuthScreen'
+import { SettingsScreen } from './screens/SettingsScreen'
 import { AccountMenu } from './components/AccountMenu'
 import { SignOutDialog } from './components/SignOutDialog'
 import { Notice } from './components/Notice'
-import { ThemeToggle } from './components/ThemeToggle'
 
 /**
  * App shell: routes between the main screen, the editor and the optional
@@ -31,13 +31,14 @@ export default function App() {
   const sync = useSyncStatus()
   const [editing, setEditing] = useState<EditorTarget | null>(null)
   const [showAuth, setShowAuth] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
   // The nearby/all filter lives here (not in MainScreen) so it survives opening
   // the editor and returning; a fresh app launch remounts App and resets it to
   // nearby.
   const [view, setView] = useState<ViewMode>('nearby')
   // Lives in the shell (not MainScreen) so the GPS watch keeps refining the
   // location while a new note is being written during the refinement window.
-  const geo = useGeolocation(editing === null && !showAuth)
+  const geo = useGeolocation(editing === null && !showAuth && !showSettings)
   const [confirmSignOut, setConfirmSignOut] = useState(false)
   // Whether unsynced changes remain when the sign-out dialog opens, so it can
   // warn that removing notes from the device would lose them.
@@ -76,6 +77,14 @@ export default function App() {
     )
   }
 
+  if (showSettings) {
+    return (
+      <div className="mx-auto flex min-h-full w-full max-w-xl flex-col pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)]">
+        <SettingsScreen signedIn={signedIn} onClose={() => setShowSettings(false)} />
+      </div>
+    )
+  }
+
   return (
     <div className="mx-auto flex min-h-full w-full max-w-xl flex-col pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)]">
       <header className="sticky top-0 z-20 flex items-center gap-1 border-b border-border/60 bg-background/85 px-4 pt-[calc(env(safe-area-inset-top)+0.625rem)] pb-2.5 backdrop-blur">
@@ -83,13 +92,13 @@ export default function App() {
           <MapPin className="size-5 text-primary" aria-hidden />
           {t('app.name')}
         </h1>
-        <ThemeToggle />
         {/* Hidden until the session read settles so the badge never flips. */}
         {account !== undefined && (
           <AccountMenu
             signedIn={signedIn}
             onSignIn={() => setShowAuth(true)}
             onSignOut={() => void handleSignOut()}
+            onOpenSettings={() => setShowSettings(true)}
           />
         )}
       </header>
@@ -103,6 +112,16 @@ export default function App() {
       {sync.status === 'unauthorized' && signedIn && (
         <Notice>
           {t('auth.sessionExpired')}
+          <Button variant="outline" size="xs" onClick={() => setShowAuth(true)}>
+            {t('auth.signIn')}
+          </Button>
+        </Notice>
+      )}
+      {/* Revoked from another device: the account marker and notes are already
+          wiped, so this is shown regardless of signedIn (now false). */}
+      {sync.status === 'revoked' && (
+        <Notice>
+          {t('auth.signedOutRemotely')}
           <Button variant="outline" size="xs" onClick={() => setShowAuth(true)}>
             {t('auth.signIn')}
           </Button>

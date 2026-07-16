@@ -1,5 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="112" fill="#b91c1c"/>
+  <!-- iOS applies its own corner mask but no safe-zone shrink, so the artwork stays at full size -->
+  <rect width="512" height="512" fill="#b91c1c"/>
   <!-- Notepad with a folded corner at the bottom right -->
   <path d="M148 144h216a36 36 0 0 1 36 36v188l-72 72H148a36 36 0 0 1-36-36V180a36 36 0 0 1 36-36z" fill="#fff"/>
   <path d="M328 440v-72h72z" fill="#fecaca"/>

@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GeoNotes icon candidates</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; padding: 24px; background: #f4f4f5; color: #18181b; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  p.sub { margin: 0 0 24px; color: #52525b; font-size: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+  .card { background: #fff; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+  .card h2 { font-size: 15px; margin: 0 0 2px; }
+  .card p { font-size: 13px; color: #52525b; margin: 0 0 16px; }
+  .big svg { width: 160px; height: 160px; display: block; }
+  .row { display: flex; align-items: flex-end; gap: 12px; margin-top: 16px; padding: 12px; border-radius: 8px; }
+  .row.light { background: #fafafa; border: 1px solid #e4e4e7; }
+  .row.dark { background: #18181b; }
+  .row .s64 svg { width: 64px; height: 64px; display: block; }
+  .row .s32 svg { width: 32px; height: 32px; display: block; }
+  .row .s16 svg { width: 16px; height: 16px; display: block; }
+</style>
+</head>
+<body>
+<h1>GeoNotes icon candidates</h1>
+<p class="sub">Each card shows 160px, then 64 / 32 / 16px on light and dark backgrounds. The current icon is first for comparison.</p>
+<div class="grid" id="grid"></div>
+
+<h1 style="margin-top:32px">Amber marker with different backgrounds</h1>
+<p class="sub">Candidate B with the amber marker kept, swapping the background color. Note lines match the background; the folded corner is a light tint of it.</p>
+<div class="grid" id="grid-colors"></div>
+
+<script>
+const icons = [
+  {
+    name: "Current",
+    desc: "Marker with note lines inside it",
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#0f766e"/><path d="M256 88c-66 0-120 54-120 120 0 90 120 216 120 216s120-126 120-216c0-66-54-120-120-120z" fill="#fff"/><rect x="196" y="164" width="120" height="14" rx="7" fill="#0f766e"/><rect x="196" y="200" width="120" height="14" rx="7" fill="#0f766e"/><rect x="196" y="236" width="76" height="14" rx="7" fill="#0f766e"/></svg>`
+  },
+  {
+    name: "A. Teal marker on white pad",
+    desc: "Two-tone brand palette, white outline lifts the marker off the background",
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#0f766e"/><path d="M148 144h216a36 36 0 0 1 36 36v188l-72 72H148a36 36 0 0 1-36-36V180a36 36 0 0 1 36-36z" fill="#fff"/><path d="M328 440v-72h72z" fill="#99f6e4"/><rect x="152" y="328" width="200" height="16" rx="8" fill="#0f766e"/><rect x="152" y="362" width="176" height="16" rx="8" fill="#0f766e"/><rect x="152" y="396" width="112" height="16" rx="8" fill="#0f766e"/><path d="M256 64c-47 0-86 39-86 86 0 64 86 146 86 146s86-82 86-146c0-47-39-86-86-86z" fill="#0f766e" stroke="#fff" stroke-width="20" paint-order="stroke"/><circle cx="256" cy="150" r="32" fill="#fff"/></svg>`
+  },
+  {
+    name: "B. Amber marker accent",
+    desc: "Adds a warm accent color so the marker pops",
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#0f766e"/><path d="M148 144h216a36 36 0 0 1 36 36v188l-72 72H148a36 36 0 0 1-36-36V180a36 36 0 0 1 36-36z" fill="#fff"/><path d="M328 440v-72h72z" fill="#99f6e4"/><rect x="152" y="328" width="200" height="16" rx="8" fill="#0f766e"/><rect x="152" y="362" width="176" height="16" rx="8" fill="#0f766e"/><rect x="152" y="396" width="112" height="16" rx="8" fill="#0f766e"/><path d="M256 64c-47 0-86 39-86 86 0 64 86 146 86 146s86-82 86-146c0-47-39-86-86-86z" fill="#f59e0b" stroke="#fff" stroke-width="14" paint-order="stroke"/><circle cx="256" cy="150" r="32" fill="#fff"/></svg>`
+  },
+  {
+    name: "C. White marker on light teal pad",
+    desc: "Monochrome teal palette, closest to the current icon's feel",
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#0f766e"/><path d="M148 144h216a36 36 0 0 1 36 36v188l-72 72H148a36 36 0 0 1-36-36V180a36 36 0 0 1 36-36z" fill="#99f6e4"/><path d="M328 440v-72h72z" fill="#5eead4"/><rect x="152" y="328" width="200" height="16" rx="8" fill="#0f766e"/><rect x="152" y="362" width="176" height="16" rx="8" fill="#0f766e"/><rect x="152" y="396" width="112" height="16" rx="8" fill="#0f766e"/><path d="M256 64c-47 0-86 39-86 86 0 64 86 146 86 146s86-82 86-146c0-47-39-86-86-86z" fill="#fff"/><circle cx="256" cy="150" r="32" fill="#0f766e"/></svg>`
+  }
+];
+
+// Builds the candidate-B SVG (amber marker on white pad) over a given background color.
+// bg is used for the rounded square and the note lines; flap is a light tint of bg for the folded corner.
+function amberVariantSvg(bg, flap) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="${bg}"/><path d="M148 144h216a36 36 0 0 1 36 36v188l-72 72H148a36 36 0 0 1-36-36V180a36 36 0 0 1 36-36z" fill="#fff"/><path d="M328 440v-72h72z" fill="${flap}"/><rect x="152" y="328" width="200" height="16" rx="8" fill="${bg}"/><rect x="152" y="362" width="176" height="16" rx="8" fill="${bg}"/><rect x="152" y="396" width="112" height="16" rx="8" fill="${bg}"/><path d="M256 64c-47 0-86 39-86 86 0 64 86 146 86 146s86-82 86-146c0-47-39-86-86-86z" fill="#f59e0b" stroke="#fff" stroke-width="14" paint-order="stroke"/><circle cx="256" cy="150" r="32" fill="#fff"/></svg>`;
+}
+
+const bgColors = [
+  { name: "Red", bg: "#b91c1c", flap: "#fecaca" },
+  { name: "Orange", bg: "#c2410c", flap: "#fed7aa" },
+  { name: "Yellow", bg: "#ca8a04", flap: "#fef08a" },
+  { name: "Green", bg: "#15803d", flap: "#bbf7d0" },
+  { name: "Blue", bg: "#1d4ed8", flap: "#bfdbfe" },
+  { name: "Indigo", bg: "#4338ca", flap: "#c7d2fe" },
+  { name: "Purple", bg: "#6d28d9", flap: "#ddd6fe" },
+  { name: "Pink", bg: "#be185d", flap: "#fbcfe8" },
+  { name: "Slate", bg: "#334155", flap: "#e2e8f0" },
+  { name: "Black", bg: "#18181b", flap: "#d4d4d8" }
+];
+
+for (const c of bgColors) {
+  icons.push({ name: `B / ${c.name}`, desc: `Amber marker on ${c.bg}`, svg: amberVariantSvg(c.bg, c.flap), colorGrid: true });
+}
+
+const grid = document.getElementById("grid");
+const gridColors = document.getElementById("grid-colors");
+for (const icon of icons) {
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <h2>${icon.name}</h2>
+    <p>${icon.desc}</p>
+    <div class="big">${icon.svg}</div>
+    <div class="row light">
+      <div class="s64">${icon.svg}</div>
+      <div class="s32">${icon.svg}</div>
+      <div class="s16">${icon.svg}</div>
+    </div>
+    <div class="row dark">
+      <div class="s64">${icon.svg}</div>
+      <div class="s32">${icon.svg}</div>
+      <div class="s16">${icon.svg}</div>
+    </div>`;
+  (icon.colorGrid ? gridColors : grid).appendChild(card);
+}
+</script>
+</body>
+</html>

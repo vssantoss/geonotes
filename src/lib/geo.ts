@@ -91,29 +91,32 @@ const FEET_PER_METER = 3.28084
 /** Feet per mile. */
 const FEET_PER_MILE = 5280
 
+/** A distance unit system: feet/miles or meters/kilometers. */
+export type UnitSystem = 'imperial' | 'metric'
+
 /**
- * Whether a locale displays distances in imperial units (feet/miles). Per
- * product spec English and Spanish use imperial; Portuguese uses metric.
+ * The default unit system for a locale, used when the user has not overridden
+ * it. Per product spec English and Spanish default to imperial; Portuguese
+ * defaults to metric.
  *
  * @param locale - the active UI locale ('en' | 'es' | 'pt').
- * @returns true for imperial locales, false for metric ones.
+ * @returns 'imperial' for English/Spanish, 'metric' for Portuguese.
  */
-function isImperialLocale(locale: string): boolean {
-  return locale !== 'pt'
+export function localeUnits(locale: string): UnitSystem {
+  return locale === 'pt' ? 'metric' : 'imperial'
 }
 
 /**
- * Formats a distance for display in the locale's unit system: feet then miles
- * for imperial locales (English/Spanish), meters then kilometers for metric
- * ones (Portuguese). The unit follows the locale rather than the value so a
- * list of notes stays in one system.
+ * Formats a distance for display in the given unit system: feet then miles for
+ * imperial, meters then kilometers for metric. The unit follows the chosen
+ * system rather than the value so a list of notes stays in one system.
  *
  * @param meters - the distance in meters.
- * @param locale - the active UI locale ('en' | 'es' | 'pt').
+ * @param units - the unit system to render in.
  * @returns e.g. "98 ft" / "1.3 mi" (imperial) or "12 m" / "3.4 km" (metric).
  */
-export function formatDistance(meters: number, locale: string): string {
-  if (isImperialLocale(locale)) {
+export function formatDistance(meters: number, units: UnitSystem): string {
+  if (units === 'imperial') {
     const feet = meters * FEET_PER_METER
     if (feet < FEET_PER_MILE) return `${Math.round(feet)} ft`
     return `${(feet / FEET_PER_MILE).toFixed(1)} mi`

@@ -5,7 +5,7 @@ import type {
 } from '@simplewebauthn/browser'
 import { apiFetch } from './api'
 import { db, KV, kvGet, kvSet } from './db'
-import { syncNow } from './sync'
+import { syncNow, wipeLocalAccountData } from './sync'
 
 /**
  * A passkey ceremony the server has verified and placed in an HttpOnly cookie,
@@ -200,7 +200,7 @@ export async function hasUnsyncedNotes(): Promise<boolean> {
  * @param email - the account e-mail.
  * @returns a hex-encoded SHA-256 digest.
  */
-async function hashAccount(email: string): Promise<string> {
+export async function hashAccount(email: string): Promise<string> {
   const data = new TextEncoder().encode(email.trim().toLowerCase())
   const digest = await crypto.subtle.digest('SHA-256', data)
   return Array.from(new Uint8Array(digest))
@@ -223,15 +223,16 @@ export async function signOut(keepNotes: boolean): Promise<void> {
   await syncNow()
   // Best-effort revocation; local sign-out proceeds even when offline.
   await apiFetch('/api/auth/logout', {}).catch(() => {})
-  await db.transaction('rw', db.notes, db.outbox, db.kv, async () => {
-    if (!keepNotes) {
-      await db.notes.clear()
-      await db.outbox.clear()
-      // The device no longer holds any account's notes.
-      await kvSet(KV.notesOwnerHash, null)
-    }
-    // Clear the account link either way. The sync cursor is account-scoped, so
-    // it goes too; a later sign-in reconciles from scratch.
+  if (!keepNotes) {
+    // Same wipe a remote revocation applies: notes, outbox and every account
+    // marker removed together.
+    await wipeLocalAccountData()
+    return
+  }
+  // Keeping the notes: only drop the account link and the account-scoped sync
+  // cursor, so a later sign-in reconciles from scratch while the notes stay
+  // available offline.
+  await db.transaction('rw', db.kv, async () => {
     await kvSet(KV.userEmail, null)
     await kvSet(KV.syncCursor, null)
   })
