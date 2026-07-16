@@ -123,5 +123,6 @@
   "email.codeSent": "Enter the 6-digit code we sent to {email}.",
   "email.confirm": "Change e-mail",
   "email.inUse": "That address is already used by another account.",
+  "email.sameAddress": "That is already your current e-mail address.",
   "email.success": "Your account e-mail was updated."
 }

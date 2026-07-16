@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { AtSign } from 'lucide-react'
+import { AtSign, TriangleAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { confirmEmailChange, requestEmailChangeCode } from '@/lib/account'
@@ -42,6 +42,12 @@ export function EmailSection() {
 
   /** Sends a confirmation code to the typed new address and advances to the code step. */
   const sendCode = async () => {
+    // Block changing to the current address before sending a pointless code to
+    // it; the server enforces the same rule as a backstop.
+    if (newEmail.trim().toLowerCase() === (currentEmail ?? '').toLowerCase()) {
+      setError(t('email.sameAddress'))
+      return
+    }
     setBusy(true)
     setError(null)
     try {
@@ -63,8 +69,9 @@ export function EmailSection() {
       await confirmEmailChange(newEmail.trim(), code.trim())
       setStep('done')
     } catch (err) {
-      if (err instanceof ApiError && err.status === 409) setError(t('email.inUse'))
-      else if (err instanceof ApiError && err.status === 401) setError(t('auth.error.badCode'))
+      if (err instanceof ApiError && err.status === 409) {
+        setError(t(err.message === 'email unchanged' ? 'email.sameAddress' : 'email.inUse'))
+      } else if (err instanceof ApiError && err.status === 401) setError(t('auth.error.badCode'))
       else setError(t('auth.error.generic'))
     } finally {
       setBusy(false)
@@ -95,12 +102,22 @@ export function EmailSection() {
               autoFocus
               type="email"
               inputMode="email"
+              aria-invalid={!!error}
               value={newEmail}
-              onChange={(e) => setNewEmail(e.target.value)}
+              onChange={(e) => {
+                setNewEmail(e.target.value)
+                if (error) setError(null)
+              }}
               onKeyDown={(e) => e.key === 'Enter' && !busy && newEmail.trim() && void sendCode()}
               className="bg-card"
             />
           </label>
+          {error && (
+            <p className="flex items-center gap-1.5 text-xs font-normal text-amber-700 dark:text-amber-500">
+              <TriangleAlert className="size-3.5 shrink-0" aria-hidden />
+              {error}
+            </p>
+          )}
           <div className="flex gap-2">
             <Button variant="outline" size="sm" className="ml-auto" disabled={busy} onClick={reset}>
               {t('editor.cancel')}
@@ -120,12 +137,22 @@ export function EmailSection() {
               autoFocus
               inputMode="numeric"
               autoComplete="one-time-code"
+              aria-invalid={!!error}
               value={code}
-              onChange={(e) => setCode(e.target.value)}
+              onChange={(e) => {
+                setCode(e.target.value)
+                if (error) setError(null)
+              }}
               onKeyDown={(e) => e.key === 'Enter' && !busy && code.trim() && void confirm()}
               className="bg-card"
             />
           </label>
+          {error && (
+            <p className="flex items-center gap-1.5 text-xs font-normal text-destructive">
+              <TriangleAlert className="size-3.5 shrink-0" aria-hidden />
+              {error}
+            </p>
+          )}
           {devCode && <p className="text-xs text-muted-foreground">{t('auth.devCode', { code: devCode })}</p>}
           <div className="flex gap-2">
             <Button variant="outline" size="sm" className="ml-auto" disabled={busy} onClick={reset}>
@@ -146,8 +173,6 @@ export function EmailSection() {
           </Button>
         </div>
       )}
-
-      {error && <p className="text-sm text-destructive">{error}</p>}
     </SettingsSection>
   )
 }

@@ -123,5 +123,6 @@
   "email.codeSent": "Introduce el código de 6 dígitos que enviamos a {email}.",
   "email.confirm": "Cambiar correo",
   "email.inUse": "Ese correo ya lo usa otra cuenta.",
+  "email.sameAddress": "Ese ya es tu correo actual.",
   "email.success": "El correo de tu cuenta se actualizó."
 }
