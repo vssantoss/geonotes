@@ -22,7 +22,6 @@ binding = "DB"
 database_name = "geonotes"
 database_id = "0fda6ffd-fc0e-49e1-900a-c421b64309e4"
 
-[[ratelimits]]
-name = "AUTH_RATE_LIMITER"
-namespace_id = "1001"
-simple = { limit = 20, period = 60 }
+# No rate-limit binding: the native Rate Limiting binding is Workers-only and is
+# rejected by wrangler for Pages projects. Per-IP throttling for /api/auth/* is
+# handled by a WAF Rate Limiting Rule on the gnotes.vshub.app zone (see TODO.md).

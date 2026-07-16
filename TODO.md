@@ -1,7 +1,14 @@
 # TODO
 
+- Add a WAF Rate Limiting Rule for the auth endpoints (replaces the Workers-only rate-limit binding, which Pages does not support). In the Cloudflare dashboard: `gnotes.vshub.app` zone -> Security -> WAF -> Rate limiting rules -> Create rule.
+  - Match: `URI Path starts with /api/auth/` (optionally also `/api/geocode`).
+  - Counting characteristic: client IP.
+  - Rate: ~20 requests / 60s (matches the old in-code limit of 20/min).
+  - Action: Block, with a short mitigation timeout (e.g. 60s), returning 429.
+  - After this is in place the per-IP throttle is fully at the edge; the app code already tolerates the missing `AUTH_RATE_LIMITER` binding, so no redeploy is needed to switch it on.
 - Turnstile on `email-request` for stronger bot resistance.
 - Add a timer/countdown on the Send/Resend email code button (reflect the 60s resend cooldown so users see when they can request again).
+- Add an "Install App" option to the account/badge menu that invokes the browser's PWA installation prompt so the app can be installed on the device.
 - Settings page:
   - Manage passkeys associated with the account (list, add, remove).
   - Session management: list active sessions, revoke one, revoke-all ("sign out everywhere"). Needs server endpoints and a bit more stored per session (created-at, last-seen, device label).
@@ -9,6 +16,7 @@
   - Language switch.
   - Theme switch (move it here and remove it from the top bar).
   - Distance units switch (meters/feet).
+- Set up ESLint. The project currently has no linter (no `lint` script, no config, not installed), so nothing catches lint-level issues in CI or locally. Add ESLint with the TypeScript and React Hooks plugins, a `lint` script, and wire it into the verification pipeline alongside typecheck/build/test.
 - Audit D1 database usage/cost to stay on the Cloudflare free plan. Count reads/writes per flow (sync push/pull, auth, email codes, rate limiting, sessions) against the free-tier daily limits, and for each database touch ask whether the same thing can be done 100% safely without D1 (client-side, cookie/token-encoded, KV, or cache). Only keep a database operation when there is no equally safe alternative.
 - Security integration tests (all terminal-runnable, no browser). Add the Workers Vitest pool (`@cloudflare/vitest-pool-workers` + Miniflare D1 seeded from `migrations/`) for the functions, and `fake-indexeddb` + jsdom for the client sync logic. Cover the report's assurance list:
   - Unauthenticated request cannot enroll a passkey on an existing account.
@@ -18,6 +26,7 @@
   - A credential ID cannot be reassigned to another user.
   - Every sync read and mutation stays scoped to the authenticated user.
   - A previous account's outbox is never pushed under a new account (A -> B switch; guards the owner-tagging fix in commit f95b466).
+  - Changing the account e-mail to an address already owned by a different account is rejected with 409 and leaves the user row unchanged (`email-change.ts`). Deferred from the Settings work because it needs this harness: the endpoint runs `requireUser` (seeded session row + matching cookie), `verifyEnrollToken` (a validly HMAC-signed token minted with the test secret), and two SQL statements against a `users`-seeded D1, none of which the current pure-unit function tests provide. Cheap to add once the harness exists.
   - Auth and sync responses send `Cache-Control: no-store`.
   - Oversized bodies / excessive ops are rejected before expensive processing.
   - Authenticate in tests by seeding a session row in the test D1 (bypass the passkey ceremony). Only the successful register/login happy path needs a real signed authenticator response: record one ceremony's JSON from a browser once and replay it as a fixture. Everything else needs no fixture.
