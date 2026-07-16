@@ -1,12 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="112" fill="#b91c1c"/>
+  <rect width="512" height="512" rx="112" fill="#0f766e"/>
   <!-- Notepad with a folded corner at the bottom right -->
   <path d="M148 144h216a36 36 0 0 1 36 36v188l-72 72H148a36 36 0 0 1-36-36V180a36 36 0 0 1 36-36z" fill="#fff"/>
-  <path d="M328 440v-72h72z" fill="#fecaca"/>
-  <rect x="152" y="328" width="200" height="16" rx="8" fill="#b91c1c"/>
-  <rect x="152" y="362" width="176" height="16" rx="8" fill="#b91c1c"/>
-  <rect x="152" y="396" width="112" height="16" rx="8" fill="#b91c1c"/>
-  <!-- Amber marker pinned on top, white outline separates it from the background -->
+  <path d="M328 440v-72h72z" fill="#99f6e4"/>
+  <rect x="152" y="328" width="200" height="16" rx="8" fill="#0f766e"/>
+  <rect x="152" y="362" width="176" height="16" rx="8" fill="#0f766e"/>
+  <rect x="152" y="396" width="112" height="16" rx="8" fill="#0f766e"/>
+  <!-- Amber marker as an accent color against the teal background -->
   <path d="M256 64c-47 0-86 39-86 86 0 64 86 146 86 146s86-82 86-146c0-47-39-86-86-86z" fill="#f59e0b" stroke="#fff" stroke-width="14" paint-order="stroke"/>
   <circle cx="256" cy="150" r="32" fill="#fff"/>
 </svg>
