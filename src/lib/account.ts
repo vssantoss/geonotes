@@ -2,7 +2,7 @@ import { startRegistration } from '@simplewebauthn/browser'
 import type { PublicKeyCredentialCreationOptionsJSON } from '@simplewebauthn/browser'
 import { apiFetch } from './api'
 import { db, KV, kvGet, kvSet } from './db'
-import { hashAccount, requestEmailCode, confirmEmailCode } from './auth'
+import { hashAccount, confirmEmailCode } from './auth'
 
 // Account management for an already signed-in user: passkeys, sessions and the
 // account e-mail. The sign-in/sign-out flow lives in auth.ts; this module only
@@ -101,14 +101,19 @@ export async function revokeOtherSessions(): Promise<void> {
 
 /**
  * Sends a confirmation code to a NEW e-mail address, the first step of changing
- * the account e-mail. Reuses the standard account e-mail-code flow, so the code
- * proves control of the new mailbox.
+ * the account e-mail. Uses the authenticated change-request endpoint, which
+ * rejects an address that is unchanged or already owned by another account
+ * before any code is sent, so the flow fails fast instead of mailing a code
+ * that could never be applied.
  *
  * @param newEmail - the address to move the account to.
  * @returns the dev-only echoed code in dev mode, so the flow is testable.
+ * @throws ApiError(409) when the address is unchanged or already in use.
  */
 export async function requestEmailChangeCode(newEmail: string): Promise<{ devCode?: string }> {
-  return requestEmailCode(newEmail, 'create')
+  return apiFetch<{ sent: boolean; devCode?: string }>('/api/auth/email-change-request', {
+    email: newEmail,
+  })
 }
 
 /**

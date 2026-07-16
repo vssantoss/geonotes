@@ -54,8 +54,11 @@ export function EmailSection() {
       const { devCode } = await requestEmailChangeCode(newEmail.trim())
       setDevCode(devCode)
       setStep('code')
-    } catch {
-      setError(t('auth.error.generic'))
+    } catch (err) {
+      // The server rejects an unchanged or already-used address before sending.
+      if (err instanceof ApiError && err.status === 409) {
+        setError(t(err.message === 'email unchanged' ? 'email.sameAddress' : 'email.inUse'))
+      } else setError(t('auth.error.generic'))
     } finally {
       setBusy(false)
     }
