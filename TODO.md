@@ -7,8 +7,6 @@
   - Action: Block, with a short mitigation timeout (e.g. 60s), returning 429.
   - After this is in place the per-IP throttle is fully at the edge; the app code already tolerates the missing `AUTH_RATE_LIMITER` binding, so no redeploy is needed to switch it on.
 - Turnstile on `email-request` for stronger bot resistance.
-- Add a timer/countdown on the Send/Resend email code button (reflect the 60s resend cooldown so users see when they can request again).
-- Add an "Install App" option to the account/badge menu that invokes the browser's PWA installation prompt so the app can be installed on the device.
 - Settings page:
   - Manage passkeys associated with the account (list, add, remove).
   - Session management: list active sessions, revoke one, revoke-all ("sign out everywhere"). Needs server endpoints and a bit more stored per session (created-at, last-seen, device label).
@@ -16,6 +14,8 @@
   - Language switch.
   - Theme switch (move it here and remove it from the top bar).
   - Distance units switch (meters/feet).
+  - Delete account: a settings option that, on click, opens a warning/confirmation dialog before doing anything. Confirming does NOT delete immediately; it marks the account for deletion (record the deletion-requested timestamp) and signs the user out. The account and its data (user row, credentials, sessions, email codes, synced notes) are permanently removed 30 days later by a scheduled job. During those 30 days the e-mail address stays reserved and cannot be used (account creation, e-mail change, or recovery must treat a marked-for-deletion address as unavailable). Decide whether signing back in within the window cancels the deletion (recommended) and surface that in the UI.
+- Application/audit log for significant account lifecycle events. Persist an append-only record (e.g. a D1 table: event type, user id, e-mail or hashed e-mail, timestamp, and minimal context) for: account creation, e-mail change (from -> to), account deletion requested (user asks to delete, start of the 30-day window), and real account deletion (the scheduled job actually removes everything). Keep it privacy-conscious (no codes, no tokens) and use it for support/debugging and abuse investigation.
 - Set up ESLint. The project currently has no linter (no `lint` script, no config, not installed), so nothing catches lint-level issues in CI or locally. Add ESLint with the TypeScript and React Hooks plugins, a `lint` script, and wire it into the verification pipeline alongside typecheck/build/test.
 - Audit D1 database usage/cost to stay on the Cloudflare free plan. Count reads/writes per flow (sync push/pull, auth, email codes, rate limiting, sessions) against the free-tier daily limits, and for each database touch ask whether the same thing can be done 100% safely without D1 (client-side, cookie/token-encoded, KV, or cache). Only keep a database operation when there is no equally safe alternative.
 - Security integration tests (all terminal-runnable, no browser). Add the Workers Vitest pool (`@cloudflare/vitest-pool-workers` + Miniflare D1 seeded from `migrations/`) for the functions, and `fake-indexeddb` + jsdom for the client sync logic. Cover the report's assurance list:
