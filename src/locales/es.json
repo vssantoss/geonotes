@@ -124,5 +124,10 @@
   "email.confirm": "Cambiar correo",
   "email.inUse": "Ese correo ya lo usa otra cuenta.",
   "email.sameAddress": "Ese ya es tu correo actual.",
-  "email.success": "El correo de tu cuenta se actualizó."
+  "email.success": "El correo de tu cuenta se actualizó.",
+  "account.deleteTitle": "Eliminar cuenta",
+  "account.deleteDescription": "Elimina permanentemente tu cuenta y todas tus notas.",
+  "account.delete": "Eliminar cuenta",
+  "account.deleteConfirm": "Tu cuenta y todas tus notas se programarán para eliminarse de forma permanente dentro de 30 días, y se cerrará la sesión en todos los dispositivos. Vuelve a iniciar sesión antes de entonces para cancelarlo. ¿Eliminar tu cuenta?",
+  "account.deleteConfirmYes": "Eliminar mi cuenta"
 }

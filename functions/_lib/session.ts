@@ -43,8 +43,16 @@ export async function createSession(env: Env, userId: string, request: Request):
   // their original expiry, so this reclaims them too). Piggybacks on the login
   // write so no separate scheduled job is needed.
   const evictExpired = env.DB.prepare('DELETE FROM sessions WHERE expires_at < ?').bind(now)
+  // Signing in cancels a pending account deletion: any successful new session
+  // clears the mark, so a user who changes their mind just logs back in during
+  // the 30-day grace window. This is the single choke point for new sessions, so
+  // it covers passkey login, recovery and registration alike. Bounded to marked
+  // rows so an ordinary login touches no user row.
+  const cancelDeletion = env.DB.prepare(
+    'UPDATE users SET deletion_requested_at = NULL WHERE id = ? AND deletion_requested_at IS NOT NULL',
+  ).bind(userId)
   const previous = readSessionCookie(request)
-  const statements = [evictExpired]
+  const statements = [evictExpired, cancelDeletion]
   if (previous) {
     statements.push(
       env.DB.prepare('DELETE FROM sessions WHERE token_hash = ?').bind(await sha256Hex(previous)),

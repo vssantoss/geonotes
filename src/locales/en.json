@@ -124,5 +124,10 @@
   "email.confirm": "Change e-mail",
   "email.inUse": "That address is already used by another account.",
   "email.sameAddress": "That is already your current e-mail address.",
-  "email.success": "Your account e-mail was updated."
+  "email.success": "Your account e-mail was updated.",
+  "account.deleteTitle": "Delete account",
+  "account.deleteDescription": "Permanently delete your account and all your notes.",
+  "account.delete": "Delete account",
+  "account.deleteConfirm": "Your account and all your notes will be scheduled for permanent deletion in 30 days, and you'll be signed out on every device. Sign in again before then to cancel. Delete your account?",
+  "account.deleteConfirmYes": "Delete my account"
 }

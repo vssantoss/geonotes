@@ -3,6 +3,7 @@ import type { PublicKeyCredentialCreationOptionsJSON } from '@simplewebauthn/bro
 import { apiFetch } from './api'
 import { db, KV, kvGet, kvSet } from './db'
 import { hashAccount, confirmEmailCode } from './auth'
+import { wipeLocalAccountData } from './sync'
 
 // Account management for an already signed-in user: passkeys, sessions and the
 // account e-mail. The sign-in/sign-out flow lives in auth.ts; this module only
@@ -97,6 +98,21 @@ export async function revokeSession(id: string): Promise<void> {
  */
 export async function revokeOtherSessions(): Promise<void> {
   await apiFetch('/api/auth/sessions/revoke-others', {})
+}
+
+/**
+ * Requests deletion of the signed-in account. The server marks the account for
+ * deletion, signs out every device and starts a 30-day grace window before the
+ * data is permanently removed; signing back in before then cancels it. Locally
+ * this drops the account link and wipes the on-device notes, returning the app
+ * to its signed-out, local-only state. The notes stay in the account server-side
+ * until the window elapses, so a sign-in within it restores them.
+ *
+ * @throws ApiError when the request is rejected (e.g. 401 if not signed in).
+ */
+export async function deleteAccount(): Promise<void> {
+  await apiFetch('/api/auth/delete-account', {})
+  await wipeLocalAccountData()
 }
 
 /**
