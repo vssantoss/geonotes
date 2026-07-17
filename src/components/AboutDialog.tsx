@@ -1,4 +1,4 @@
-import { Heart } from 'lucide-react'
+import { Heart, Mail } from 'lucide-react'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { useT } from '@/lib/i18n'
 
@@ -6,13 +6,24 @@ import { useT } from '@/lib/i18n'
  * A small "About" dialog reached from the account menu. Centred, chromeless
  * (no close button, dismissed via Escape or backdrop) and stacked vertically:
  * the app logo, the app name, a warm "made with love" line with a beating
- * heart, and a link to the author's site. Built on the shared Dialog (focus
- * trap, Escape and backdrop dismissal included).
+ * heart, and a link to the author's site. Signed-in users also get a Contact
+ * button. Built on the shared Dialog (focus trap, Escape and backdrop dismissal
+ * included).
  *
  * @param onClose - called when the user dismisses the dialog.
+ * @param signedIn - whether a session is active; gates the Contact button.
+ * @param onContact - opens the contact form (only reachable when signed in).
  * @returns the modal about dialog.
  */
-export function AboutDialog({ onClose }: { onClose: () => void }) {
+export function AboutDialog({
+  onClose,
+  signedIn,
+  onContact,
+}: {
+  onClose: () => void
+  signedIn: boolean
+  onContact: () => void
+}) {
   const t = useT()
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -45,6 +56,19 @@ export function AboutDialog({ onClose }: { onClose: () => void }) {
               vss.dev
             </a>
           </p>
+          {/* Contact is offered only to signed-in users: the server gates it
+              behind a session so it cannot be used as an open relay. A quiet
+              text link keeps the dialog light rather than adding button chrome. */}
+          {signedIn && (
+            <button
+              type="button"
+              onClick={onContact}
+              className="mt-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground underline decoration-muted-foreground/40 underline-offset-4 transition-colors hover:text-foreground hover:decoration-foreground"
+            >
+              <Mail className="size-3.5" aria-hidden />
+              {t('contact.button')}
+            </button>
+          )}
         </div>
       </DialogContent>
     </Dialog>

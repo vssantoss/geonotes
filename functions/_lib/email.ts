@@ -2,6 +2,8 @@ import type { Env } from './env'
 
 /** The address confirmation codes are sent from. Must be on a Resend-verified domain. */
 const MAIL_FROM = 'GeoNotes <gnotes@vshub.app>'
+/** Where contact-form messages are delivered (the app owner's inbox). */
+const CONTACT_TO = 'victor@victorsantos.org'
 /** Resend's REST endpoint for sending a single e-mail. */
 const RESEND_ENDPOINT = 'https://api.resend.com/emails'
 /** Hosted app icon used as the email logo (data URIs are blocked by most clients). */
@@ -26,6 +28,16 @@ export interface EmailSender {
    * @param to - recipient e-mail address.
    */
   sendAccountDeletionNotice(to: string): Promise<void>
+
+  /**
+   * Delivers a contact-form message to the app owner's inbox. The sender's
+   * address is set as the Reply-To so a plain "reply" reaches the user without
+   * the owner having to copy the address out of the body.
+   *
+   * @param fromEmail - the signed-in user's e-mail address (the Reply-To).
+   * @param message - the plain-text message the user typed.
+   */
+  sendContactMessage(fromEmail: string, message: string): Promise<void>
 }
 
 /** Local sender used when the dev response echoes the code to the UI. */
@@ -44,6 +56,14 @@ class DevEmailSender implements EmailSender {
    * @param to - recipient e-mail address.
    */
   async sendAccountDeletionNotice(_to: string): Promise<void> {}
+
+  /**
+   * No-op contact delivery in dev, so the form works without a mail provider.
+   *
+   * @param fromEmail - the signed-in user's e-mail address.
+   * @param message - the plain-text message the user typed.
+   */
+  async sendContactMessage(_fromEmail: string, _message: string): Promise<void> {}
 }
 
 /** Sends account e-mails through Resend's REST API. */
@@ -82,22 +102,54 @@ class ResendEmailSender implements EmailSender {
   }
 
   /**
+   * E-mails a contact-form message to the app owner, with the sender's address
+   * as Reply-To so replying goes straight back to the user.
+   *
+   * @param fromEmail - the signed-in user's e-mail address.
+   * @param message - the plain-text message the user typed.
+   * @throws Error when Resend rejects the request.
+   */
+  async sendContactMessage(fromEmail: string, message: string): Promise<void> {
+    await this.send(
+      CONTACT_TO,
+      'New GeoNotes contact message',
+      contactText(fromEmail, message),
+      contactHtml(fromEmail, message),
+      fromEmail,
+    )
+  }
+
+  /**
    * Posts one e-mail to Resend.
    *
    * @param to - recipient e-mail address.
    * @param subject - the subject line.
    * @param text - the plain-text body.
    * @param html - the HTML body.
+   * @param replyTo - optional Reply-To address.
    * @throws Error when Resend rejects the request.
    */
-  private async send(to: string, subject: string, text: string, html: string): Promise<void> {
+  private async send(
+    to: string,
+    subject: string,
+    text: string,
+    html: string,
+    replyTo?: string,
+  ): Promise<void> {
     const res = await fetch(RESEND_ENDPOINT, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${this.apiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ from: MAIL_FROM, to, subject, text, html }),
+      body: JSON.stringify({
+        from: MAIL_FROM,
+        to,
+        subject,
+        text,
+        html,
+        ...(replyTo ? { reply_to: replyTo } : {}),
+      }),
     })
     if (!res.ok) {
       // Provider response bodies may repeat the recipient, so do not log them.
@@ -194,6 +246,62 @@ function codeHtml(code: string): string {
           <tr>
             <td align="center" style="padding:16px 32px 28px;text-align:center">
               <p style="margin:0;color:#71717a;font-size:13px;line-height:1.5">This code expires in 10 minutes. If you did not request it, you can safely ignore this e-mail.</p>
+            </td>
+          </tr>`)
+}
+
+/**
+ * Escapes the five HTML-significant characters so user-typed text is rendered
+ * verbatim and can never inject markup into the e-mail body.
+ *
+ * @param value - raw user input.
+ * @returns the HTML-escaped string.
+ */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+/**
+ * Builds the plain-text body for a contact-form message.
+ *
+ * @param fromEmail - the sender's e-mail address.
+ * @param message - the plain-text message the user typed.
+ * @returns the text body.
+ */
+function contactText(fromEmail: string, message: string): string {
+  return `New contact message from ${fromEmail}:\n\n${message}\n\nReply to this e-mail to respond directly to the sender.`
+}
+
+/**
+ * Builds the HTML body for a contact-form message, reusing the shared branded
+ * shell. The message is HTML-escaped and shown with preserved line breaks; no
+ * user text is treated as markup.
+ *
+ * @param fromEmail - the sender's e-mail address.
+ * @param message - the plain-text message the user typed.
+ * @returns the HTML body.
+ */
+function contactHtml(fromEmail: string, message: string): string {
+  return emailShell(`
+          <tr>
+            <td align="center" style="padding:32px 32px 8px;text-align:center">
+              <h1 style="margin:0 0 12px;font-size:20px;font-weight:700;color:#18181b">New contact message</h1>
+              <p style="margin:0;color:#52525b;font-size:15px;line-height:1.5">From <strong style="color:${BRAND_RED}">${escapeHtml(fromEmail)}</strong></p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:20px 32px 8px">
+              <div style="background:#ffffff;border:1px solid #e4e4e7;border-radius:12px;padding:16px 20px;color:#18181b;font-size:15px;line-height:1.6;white-space:pre-wrap;word-break:break-word">${escapeHtml(message)}</div>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:16px 32px 28px;text-align:center">
+              <p style="margin:0;color:#71717a;font-size:13px;line-height:1.5">Reply to this e-mail to respond directly to the sender.</p>
             </td>
           </tr>`)
 }

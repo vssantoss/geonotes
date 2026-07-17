@@ -20,6 +20,9 @@ export interface Note {
 /** Maximum allowed note length in characters. */
 export const NOTE_MAX_LENGTH = 512
 
+/** Maximum allowed length of a contact-form message, in characters. */
+export const CONTACT_MESSAGE_MAX_LENGTH = 512
+
 /** One client mutation pushed to the server during sync. */
 export type SyncOp =
   | { op: 'upsert'; note: Note }
