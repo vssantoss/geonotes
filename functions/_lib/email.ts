@@ -22,6 +22,15 @@ export interface EmailSender {
   sendCode(to: string, code: string): Promise<void>
 
   /**
+   * Welcomes a newly created account with a warm, personal thank-you note that
+   * also states the app's no-tracking privacy stance and points to the in-app
+   * contact and donate options.
+   *
+   * @param to - recipient e-mail address.
+   */
+  sendWelcome(to: string): Promise<void>
+
+  /**
    * Notifies an address that its account was scheduled for deletion, explaining
    * the 30-day grace window and how to cancel it.
    *
@@ -49,6 +58,13 @@ class DevEmailSender implements EmailSender {
    * @param code - the 6-digit code.
    */
   async sendCode(_to: string, _code: string): Promise<void> {}
+
+  /**
+   * No-op welcome in dev, so account creation works without a mail provider.
+   *
+   * @param to - recipient e-mail address.
+   */
+  async sendWelcome(_to: string): Promise<void> {}
 
   /**
    * No-op deletion notice in dev, so the flow works without a mail provider.
@@ -83,6 +99,17 @@ class ResendEmailSender implements EmailSender {
    */
   async sendCode(to: string, code: string): Promise<void> {
     await this.send(to, `${code} is your GeoNotes confirmation code`, codeText(code), codeHtml(code))
+  }
+
+  /**
+   * E-mails the welcome note to a newly created account, reusing the shared
+   * branded template.
+   *
+   * @param to - recipient e-mail address.
+   * @throws Error when Resend rejects the request.
+   */
+  async sendWelcome(to: string): Promise<void> {
+    await this.send(to, 'Welcome to GeoNotes', welcomeText(), welcomeHtml())
   }
 
   /**
@@ -246,6 +273,61 @@ function codeHtml(code: string): string {
           <tr>
             <td align="center" style="padding:16px 32px 28px;text-align:center">
               <p style="margin:0;color:#71717a;font-size:13px;line-height:1.5">This code expires in 10 minutes. If you did not request it, you can safely ignore this e-mail.</p>
+            </td>
+          </tr>`)
+}
+
+/**
+ * Builds the plain-text body for the welcome e-mail.
+ *
+ * @returns the text body.
+ */
+function welcomeText(): string {
+  return [
+    'Welcome to GeoNotes, and thank you.',
+    '',
+    "Creating an account here genuinely means a lot to me. GeoNotes is a small, independent project, and every person who decides to give it a place on their phone makes it worth building.",
+    '',
+    'A word on privacy, because it matters to me as much as it does to you: GeoNotes will never sell or share your data, shows you no ads, and uses no third-party trackers that follow you around the web. Your notes are yours alone. The few tools I rely on are chosen specifically because they respect your privacy: they help me understand how to make GeoNotes better, never to profile or identify you.',
+    '',
+    'If an idea for making GeoNotes better ever crosses your mind, there is a contact form inside the About dialog. I read every message. And if you ever feel in your heart to help the project along, a Donate option lives there too, entirely optional and deeply appreciated.',
+    '',
+    'Made with love,',
+    'Victor Santos',
+  ].join('\n')
+}
+
+/**
+ * Builds the HTML body for the welcome e-mail, reusing the shared branded shell.
+ * The closing mirrors the app's About dialog: "Made with" and a heart, signed
+ * by name.
+ *
+ * @returns the HTML body.
+ */
+function welcomeHtml(): string {
+  return emailShell(`
+          <tr>
+            <td align="center" style="padding:32px 32px 8px;text-align:center">
+              <h1 style="margin:0 0 12px;font-size:20px;font-weight:700;color:#18181b">Welcome to GeoNotes</h1>
+              <p style="margin:0;color:#52525b;font-size:15px;line-height:1.6">Creating an account here genuinely means a lot to me. GeoNotes is a small, independent project, and every person who gives it a place on their phone makes it worth building.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:16px 32px 8px">
+              <div style="background:#ffffff;border:1px solid #e4e4e7;border-radius:12px;padding:16px 20px;color:#52525b;font-size:14px;line-height:1.6;text-align:center">
+                A word on privacy, because it matters to me as much as it does to you: GeoNotes will <strong style="color:#18181b">never sell or share your data</strong>, shows you <strong style="color:#18181b">no ads</strong>, and uses <strong style="color:#18181b">no third-party trackers</strong> that follow you around the web. Your notes are yours alone. The few tools I rely on are chosen specifically because they respect your privacy: they help me understand how to make GeoNotes better, never to profile or identify you.
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:16px 32px 8px;text-align:center">
+              <p style="margin:0;color:#52525b;font-size:15px;line-height:1.6">If an idea for making GeoNotes better ever crosses your mind, there is a contact form inside the <strong style="color:#18181b">About</strong> dialog, I read every message. And if you ever feel in your heart to help the project along, a <strong style="color:#18181b">Donate</strong> option lives there too: entirely optional, and deeply appreciated.</p>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:20px 32px 28px;text-align:center">
+              <p style="margin:0;color:#52525b;font-size:15px;line-height:1.6">Made with <span style="color:#ef4444">&#10084;</span></p>
+              <p style="margin:2px 0 0;color:#18181b;font-size:15px;font-weight:700">Victor Santos</p>
             </td>
           </tr>`)
 }

@@ -7,7 +7,7 @@
 - Application/audit log for significant account lifecycle events. Persist an append-only record (e.g. a D1 table: event type, user id, e-mail or hashed e-mail, timestamp, and minimal context) for: account creation, e-mail change (from -> to), account deletion requested (user asks to delete, start of the 30-day window), and real account deletion (the scheduled job actually removes everything). Keep it privacy-conscious (no codes, no tokens) and use it for support/debugging and abuse investigation.
 - Set up ESLint. The project currently has no linter (no `lint` script, no config, not installed), so nothing catches lint-level issues in CI or locally. Add ESLint with the TypeScript and React Hooks plugins, a `lint` script, and wire it into the verification pipeline alongside typecheck/build/test.
 - Enable PostHog for product analytics.
-- Welcome e-mail after account creation: a warm thank-you message, an invitation to share suggestions via the contact option inside the About dialog, and links to the privacy policy and terms of use.
+- Donate button inside the About dialog. A simple link/button (alongside the existing Contact option) pointing to a donation destination so users can support the project. Decide the provider and keep it lightweight (an external link, no payment handling in-app).
 - Privacy policy and terms of use page.
 
 ---
