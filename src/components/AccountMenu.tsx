@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { CircleUserRound, Download, LogIn, LogOut, Settings } from 'lucide-react'
+import { CircleUserRound, Download, Info, LogIn, LogOut, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -14,6 +14,8 @@ import { kvGet, KV } from '@/lib/db'
 import { useT } from '@/lib/i18n'
 import { usePwaInstall, isIosInstallAvailable } from '@/hooks/usePwaInstall'
 import { IosInstallDialog } from '@/components/IosInstallDialog'
+import { AboutDialog } from '@/components/AboutDialog'
+import { ContactDialog } from '@/components/ContactDialog'
 
 interface AccountMenuProps {
   /** Whether a session is active; switches badge and menu between the signed-in and signed-out variants. */
@@ -50,6 +52,8 @@ export function AccountMenu({ signedIn, onSignIn, onSignOut, onOpenSettings }: A
   // resolved once. The two are mutually exclusive (canInstall is Chromium-only).
   const iosInstall = useMemo(() => isIosInstallAvailable(), [])
   const [showIosInstall, setShowIosInstall] = useState(false)
+  const [showAbout, setShowAbout] = useState(false)
+  const [showContact, setShowContact] = useState(false)
 
   return (
     <>
@@ -106,6 +110,13 @@ export function AccountMenu({ signedIn, onSignIn, onSignOut, onOpenSettings }: A
             </>
           )}
           <DropdownMenuSeparator />
+          {/* onSelect closes the menu; defer opening the dialog so it runs after
+              the dropdown's focus/close handling settles. */}
+          <DropdownMenuItem onSelect={() => setTimeout(() => setShowAbout(true), 0)}>
+            <Info />
+            {t('account.about')}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
           {signedIn ? (
             <DropdownMenuItem onSelect={onSignOut}>
               <LogOut />
@@ -120,6 +131,18 @@ export function AccountMenu({ signedIn, onSignIn, onSignOut, onOpenSettings }: A
         </DropdownMenuContent>
       </DropdownMenu>
       {showIosInstall && <IosInstallDialog onClose={() => setShowIosInstall(false)} />}
+      {showAbout && (
+        <AboutDialog
+          signedIn={signedIn}
+          onClose={() => setShowAbout(false)}
+          // Swap About for Contact so the two dialogs never stack on top of each other.
+          onContact={() => {
+            setShowAbout(false)
+            setShowContact(true)
+          }}
+        />
+      )}
+      {showContact && <ContactDialog onClose={() => setShowContact(false)} />}
     </>
   )
 }

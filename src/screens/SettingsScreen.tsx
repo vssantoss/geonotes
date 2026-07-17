@@ -12,6 +12,7 @@ import {
 import { PasskeysSection } from '@/components/settings/PasskeysSection'
 import { SessionsSection } from '@/components/settings/SessionsSection'
 import { EmailSection } from '@/components/settings/EmailSection'
+import { DeleteAccountSection } from '@/components/settings/DeleteAccountSection'
 
 /**
  * The Settings screen. Always shows the device-only cosmetic preferences
@@ -106,6 +107,9 @@ export function SettingsScreen({ signedIn, onClose }: { signedIn: boolean; onClo
             <PasskeysSection />
             <SessionsSection />
             <EmailSection />
+            {/* Closing Settings after deletion returns to the main screen, which
+                re-renders signed-out once the wiped account marker propagates. */}
+            <DeleteAccountSection onDeleted={onClose} />
           </>
         )}
       </div>
