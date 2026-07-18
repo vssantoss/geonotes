@@ -21,4 +21,12 @@ export interface Env {
    * in dev, where the code is returned to the local UI without being logged.
    */
   RESEND_API_KEY?: string
+  /**
+   * Cloudflare Turnstile secret key (set via
+   * `wrangler pages secret put TURNSTILE_SECRET`). When present, `email-request`
+   * requires a valid Turnstile token before issuing a code; when absent the
+   * check is skipped (local dev) and the client renders no widget. Must be set
+   * only after the matching client sitekey (VITE_TURNSTILE_SITEKEY) is deployed.
+   */
+  TURNSTILE_SECRET?: string
 }

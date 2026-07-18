@@ -6,3 +6,7 @@ AUTH_SECRET=dev-only-secret-not-for-production
 # Optional: set a Resend API key to actually e-mail sign-in codes in local dev.
 # Leave unset to show codes only in the local UI.
 # RESEND_API_KEY=re_...
+# Optional: Cloudflare Turnstile secret key. When set, /api/auth/email-request
+# requires a valid Turnstile token. Leave unset locally to skip the check (the
+# client then renders no widget). Pair with VITE_TURNSTILE_SITEKEY (see .env.example).
+# TURNSTILE_SECRET=0x...

@@ -67,16 +67,24 @@ export async function passkeyLogin(): Promise<PendingSignIn> {
  *
  * @param email - the address to send the code to.
  * @param mode - 'create' for a new account, 'recover' for an existing one.
+ * @param turnstileToken - the Turnstile widget token, when bot protection is
+ *          configured; omitted (undefined) in dev where the server skips it.
  * @returns the dev-only echoed code when the server runs in dev mode and a code
  *          was actually sent, so the flow is testable without a real inbox;
  *          empty in production or when nothing was sent.
  * @throws ApiError(429) when a code was requested too recently.
+ * @throws ApiError(403) when the Turnstile token is missing or rejected.
  */
 export async function requestEmailCode(
   email: string,
   mode: 'create' | 'recover',
+  turnstileToken?: string | null,
 ): Promise<{ devCode?: string }> {
-  return apiFetch<{ sent: boolean; devCode?: string }>('/api/auth/email-request', { email, mode })
+  return apiFetch<{ sent: boolean; devCode?: string }>('/api/auth/email-request', {
+    email,
+    mode,
+    turnstileToken: turnstileToken ?? undefined,
+  })
 }
 
 /**
