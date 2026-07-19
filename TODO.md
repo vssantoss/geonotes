@@ -1,5 +1,27 @@
 # TODO
 
+## Pages -> Workers cutover (manual steps, in order)
+
+The code is done and tested on branch `eslint-setup` (which stacks on `worker-integration-tests` -> `workers-migration`). Nothing below is merged to `main` yet. Every step is reversible; the Pages project stays deployed and serving production until step 11.
+
+The Pages project has already been disconnected from the repository, so merging to `main` no longer triggers a Pages build.
+
+1. **Find the current `AUTH_SECRET` value.** Do this first, before anything else. It HMAC-signs the WebAuthn challenge tokens, and Cloudflare will not read it back out for you. If it is lost, every in-flight passkey ceremony breaks at cutover and the value has to be rotated on both deployments at once. Check your password manager / wherever the Pages secret was recorded.
+2. **Merge the branches to `main`.** `workers-migration` -> `worker-integration-tests` -> `eslint-setup`, or squash the chain, whichever you prefer.
+3. **Set the three Worker secrets:** `wrangler secret put AUTH_SECRET`, `RESEND_API_KEY`, `TURNSTILE_SECRET`. Then `wrangler secret list` to confirm all three are on `geonotes-worker`. `AUTH_SECRET` must be byte-identical to the Pages value from step 1.
+4. **`pnpm deploy`.** This creates the `geonotes-worker` Worker with **no route attached**: zero production impact, Pages is still serving every real user.
+5. **Smoke-test the `workers.dev` subdomain:** the SPA loads, a deep link falls back to the SPA, `/api/geocode?lat=1&lng=1` answers, `/api/nope` returns a plain-text 404. Passkeys and e-mail sign-in **will** fail there, because `RP_ID` and the CSRF origin check both name `gnotes.vshub.app`. That is correct behaviour, not a bug to chase.
+6. **Confirm the cron fires.** `wrangler tail` and wait for the scheduled trigger. The purge is idempotent, so a clean no-op run is the expected result. Do not pass `--test-scheduled` on the staging server: it exposes a public `/__scheduled` endpoint that anyone could use to trigger the purge.
+7. **Add a Worker Route `gnotes.vshub.app/*` -> `geonotes-worker`.** A Route, not a Custom Domain: a Custom Domain cannot be attached while Pages holds the hostname, which would force a detach-then-attach with a real DNS gap. A Route sits in front of the existing Pages domain with DNS untouched, takes effect in seconds, and **rolls back by deleting the route**. This is the moment production traffic moves.
+8. **Verify production on `gnotes.vshub.app`:** the manifest says "GeoNotes" (not "GeoNotes Dev"), an existing session is still signed in, passkey login and registration both work, e-mail sign-in works, sync works, session revoke works, deletion request works. Watch `wrangler tail` for 500s.
+9. **Verify the PWA install label** on Android and iOS, on both production ("GeoNotes") and staging ("GeoNotes Dev"). This is the one thing the test suite cannot check.
+10. **Soak for a few days**, watching `wrangler tail` and D1 usage.
+11. **Retire Pages.** As a separate, low-stakes change: swap the Route for a proper Custom Domain (this is the step that needs the Pages detach), then delete the `geonotes` Pages project.
+
+Notes while both are live: the `geonotes-49a.pages.dev` deployment still reaches production D1, so it is a parallel path to the same data, not a sandbox. And do not bundle any frontend change into the cutover deploy: an unmodified frontend produces byte-identical hashed filenames, which keeps every installed service worker's precache valid across the switch.
+
+---
+
 ## Features / fixes
 
 - Account purge on a real schedule. The 30-day deletion sweep (`purgeExpiredDeletedAccounts`) currently runs opportunistically via `waitUntil` on `email-request`, so a doomed account is only purged once some address happens to request a code, and never if traffic goes quiet. Move it to a guaranteed cadence: a small standalone Worker with a Cron Trigger sharing the D1 binding that calls `purgeExpiredDeletedAccounts` (Cloudflare Pages has no cron trigger, which is why it piggybacks on a request today). Keep the opportunistic call as a cheap backstop or drop it once the cron path is live.
