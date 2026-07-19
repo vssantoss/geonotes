@@ -13,7 +13,16 @@
 ## Verification
 
 - After implementing, run all testing that does not require spinning up a browser: the test suite, typecheck, build, and any API or function-level checks.
+- The pipeline is `pnpm lint && pnpm typecheck && pnpm build && pnpm test`.
 - Run `pnpm build` **before** `pnpm test`. The `integration` vitest project boots a real local Worker from `wrangler.toml` and serves the built `dist/`, so a stale or missing build makes those tests fail or test the wrong thing. `pnpm vitest run --project unit` skips them when you only need the fast suite.
+
+## Lint
+
+`pnpm lint` runs ESLint with `typescript-eslint`'s type-checked rules, resolving each file to the tsconfig project that already owns it (app / node / worker / test) via `projectService`.
+
+**TypeScript is pinned to 6.0.3 for this.** typescript-eslint refuses to run on TypeScript 7 (an explicit version guard, not a soft warning), so upgrading TypeScript means dropping type-aware linting. Do not bump it without checking typescript-eslint's peer range first.
+
+`no-unnecessary-type-assertion` and `require-await` are off for `worker/`, `shared/` and `test/`. Both misfire there: the Workers and Hono APIs are generic with a default that infers from the assertion itself, and the async stubs are async because the interface they implement is.
 
 ## Tests
 
