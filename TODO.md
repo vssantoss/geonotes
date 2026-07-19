@@ -21,22 +21,50 @@ Context for this whole section: because the app runs on Cloudflare Pages there i
 
 So a classic "flood us offline" attack is Cloudflare's problem, not ours. What we own is **targeted, low-volume abuse that looks like legitimate traffic** and stays under DDoS thresholds: credential/email enumeration, a single IP grinding `/api/auth/*`, and D1 quota exhaustion. The app already backstops account-specific abuse (per-address email-code limits with atomic claims, input-size bounds on sync, the `requireTrustedOrigin` CSRF check, `Cache-Control: no-store`). The items below close the remaining gaps, edge rate limiting and D1 protection first.
 
-### D1 abuse protection (priority)
+### D1 abuse protection
 
-The main worry. On the Cloudflare free plan D1 has daily read/write ceilings, and any endpoint that touches D1 *before* authentication is an amplification lever: an attacker can burn our daily quota cheaply and take sync/auth down for everyone without ever tripping the DDoS thresholds. Work this in order:
+The main worry. On the Cloudflare free plan D1 has daily read/write ceilings (roughly 100K writes/day, with far more generous reads), and any endpoint that touches D1 *before* authentication is an amplification lever: an attacker can burn our daily quota cheaply and take sync/auth down for everyone without ever tripping the DDoS thresholds.
 
-1. **Map every unauthenticated (or pre-auth) D1 touch.** Enumerate exactly which endpoints hit the database before a valid session exists, and how many reads/writes each costs. Known offenders today:
-   - `email-request`: rate-limit-window upsert + code upsert + opportunistic prune (a DELETE batch across two tables).
-   - `email-verify`: attempt-claim UPDATE.
-   - `passkey-login-options` / `passkey-login`: credential/challenge lookups.
-   - The sync push/pull path (authenticated, but the most expensive per-request D1 work, so it matters once a session exists).
-   Each entry is a lever an attacker can pull; the list drives every mitigation below.
-2. **Cap requests at the edge before they reach D1.** The WAF rate-limit rule (below) is the single most effective D1 protection: a request blocked at the edge costs zero D1. This is why the `/api/auth/` rule is the top security item.
-3. **Move ephemeral, non-relational state off D1 onto KV or a Durable Object.** The email-code tables (`email_codes`, `email_code_rate_limits`) are TTL'd, address-keyed, and never joined, an ideal fit for KV (or a DO for the atomic counters). KV/DO reads and writes do **not** count against the D1 daily quota, so relocating this state removes the cheapest abuse lever entirely. Keep in D1 only what needs relational/transactional guarantees (users, credentials, sessions, notes).
-4. **Stop per-request pruning from being an abuse lever.** The opportunistic prune fires a DELETE batch on every `email-request`. Confirm it stays off the response path (`waitUntil`), and consider moving pruning to a scheduled Cron trigger instead so an attacker hammering `email-request` cannot drive extra writes on our dime. A nightly sweep is cheaper and predictable.
-5. **Bound distinct-address table growth.** Because the email-code tables key on address, an attacker cycling random addresses inserts one row each. The edge per-IP limit plus Turnstile on `email-request` (below) are what keep random-address flooding from ballooning those tables (and their write count).
-6. **Defense-in-depth: a KV/cache per-IP pre-check inside the Function.** As a cheap backstop if a WAF rule is ever misconfigured or removed, gate the expensive handlers behind a KV counter (KV reads are far cheaper than D1 and off the D1 quota). Optional, only if we want belt-and-suspenders.
-7. **Monitor D1 usage.** Set up a Cloudflare notification or a GraphQL Analytics alert on daily D1 read/write consumption so abuse surfaces as an alert well before it hits the ceiling, rather than as an outage.
+**Decided strategy (2026-07):** ship no new in-code protection now. The app already backstops the abuse that actually matters (per-address email-code limits with atomic claims, Turnstile on `email-request`, input-size bounds on sync, `requireTrustedOrigin`, `Cache-Control: no-store`). The plan, in ascending order of effort:
+
+1. **WAF rate-limit rule at the edge, if the free plan exposes it** (see "WAF rate limiting" below). A request blocked at the edge costs zero D1, so this is the single highest-value lever and it needs no code and no redeploy. The free plan allows exactly one rate-limit rule; spend it on `/api/auth/`. If it turns out the free plan does not expose the feature at all, skip it and lean on the managed rulesets plus the existing app-layer limits.
+2. **Monitor D1 usage** (see "Monitor D1 usage" below) so consumption surfaces as an alert well before the ceiling, not as an outage.
+3. **Migrate Pages -> Workers when D1 usage becomes a concern** (or a little before, if we want the payoff sooner). This is the real structural fix and has its own subsection below. It is deliberately *not* done now: it is a moderate migration with a WebAuthn-domain cutover, not worth it until D1 pressure is real or we want what it unlocks (native rate limiting + cron) for other reasons.
+
+Two earlier ideas from this plan are explicitly abandoned, because they do not survive the free-tier quota math:
+
+- **Do NOT move the email-code tables to KV.** KV's free-tier ceiling is only ~1,000 writes/day, about 100x smaller than D1's ~100K, and that state is write-heavy (a rate-limit upsert + a code upsert per request). Relocating it to KV would shrink the abuse target 100x, the opposite of the goal. If this state ever leaves D1 it goes to a Durable Object, not KV, and only as part of the Workers migration.
+- **Do NOT hand-roll an in-code per-IP counter on Pages.** A KV counter dies at 1,000 writes/day, and a Durable Object counter cannot be defined inside Pages Functions (the DO class must live in a separate Worker), so it drags a Worker in anyway. Once we are on Workers this whole idea collapses into the native Rate Limiting binding, which `functions/_lib/rate-limit.ts` is already written against and which consumes no D1/KV/DO quota.
+
+For reference, the pre-auth D1 touches an attacker can lever (this list drives the WAF match and the migration priorities):
+
+- `email-request`: rate-limit-window upsert + code upsert + opportunistic prune (a DELETE batch across two tables).
+- `email-verify`: attempt-claim UPDATE.
+- `passkey-login-options` / `passkey-login`: credential/challenge lookups.
+- sync push/pull: authenticated, but the most expensive per-request D1 work, so it matters once a session exists.
+
+### Migrate Cloudflare Pages -> Workers
+
+The structural answer to D1 abuse, and to the two scheduled-job gaps in the Features list at the top of this file. Cloudflare now recommends Workers (with static assets) over Pages for new work, and Workers exposes two primitives Pages structurally cannot:
+
+- **The native Rate Limiting binding**: the correct, quota-free per-IP limiter. `functions/_lib/rate-limit.ts` already calls `env.AUTH_RATE_LIMITER.limit({ key })` and no-ops today only because the binding is Workers-only. After migration it just works: no Durable Object, no counter code, no fail-open/closed edge cases.
+- **Cron Triggers**: retires the two `waitUntil`-piggybacked jobs (`purgeExpiredDeletedAccounts` and the orphan-account sweep, both in the Features list above) that today only run when some address happens to request a code. It also lets the email-code prune move to a nightly sweep instead of firing a DELETE batch on every `email-request`.
+
+**What ports for free (~95%):** every handler body and everything in `functions/_lib/` is plain `(request, env, ctx)` logic with no Pages dependency, so it moves essentially unchanged.
+
+**What it actually costs:**
+
+- *Routing.* Pages file-based routing (19 endpoints plus two dynamic `[id]` routes) has to become an explicit router. The `route()` wrapper signature changes from `EventContext` to `(request, env, ctx)`, and `waitUntil` moves to `ctx.waitUntil` (touches `email-request.ts`, which uses it twice).
+- *`_middleware.ts`.* Its `HTMLRewriter` + `/manifest.webmanifest` relabel logic rewires to run the Worker first, call `env.ASSETS.fetch(request)`, then apply the rewriter to the result. The one genuinely rearchitected file.
+- *Static assets + config.* `vite build` still emits `dist/` unchanged. `wrangler.toml` swaps `pages_build_output_dir` for `main = <worker entry>` plus an `[assets]` block, with the Worker running before assets so `/api/*` is seen first.
+- *Re-provisioning.* Re-put secrets with `wrangler secret put` (`AUTH_SECRET`, `RESEND_API_KEY`, `TURNSTILE_SECRET`); the D1 binding and `database_id` carry over. Local and staging tooling changes: `wrangler pages dev dist` (port 8788, behind the `/srv` nginx + cloudflared tunnel) becomes `wrangler dev`, and `wrangler pages deploy dist` becomes `wrangler deploy`.
+- *Cutover risk.* WebAuthn is scoped to `gnotes.vshub.app`; moving that hostname from the Pages project to the Worker must be clean or passkeys break for everyone. Stage it: deploy the Worker on a temporary hostname, verify passkey register/login, then move the custom domain. Reversible, keep the Pages project until the Worker is verified. No data migration (same D1).
+
+**Rough size:** most of a focused day of code and config, plus a carefully staged domain cutover.
+
+### Monitor D1 usage
+
+Set up a Cloudflare notification or a GraphQL Analytics alert on daily D1 read/write consumption so abuse (or plain organic growth) surfaces as an alert well before it hits the ceiling, rather than as an outage. This is also the trigger signal for the Pages -> Workers migration above: when consumption trends toward the free-tier limit, that is the cue to migrate.
 
 ### WAF rate limiting (edge)
 
@@ -49,6 +77,7 @@ Add a WAF Rate Limiting Rule for the auth endpoints (replaces the Workers-only r
 - **Consider a second, looser rule on `/api/sync`** (e.g. ~60 requests / 60s per IP). Sync is authenticated but is our most expensive D1 path, so an abusive or compromised session is worth capping. Costs nothing to add.
 - **Plan caveat:** the free plan allows exactly **one** WAF rate-limit rule (fixed 10s window, Block action). Paid plans allow multiple rules and per-second windows. Confirm which tier we're on first; if free, spend the single rule on `/api/auth/` and rely on the edge managed rules + app-layer limits for sync.
 - After this is in place the per-IP throttle is fully at the edge; the app code already tolerates the missing `AUTH_RATE_LIMITER` binding (`functions/_lib/rate-limit.ts` no-ops when it's absent), so no redeploy is needed to switch it on.
+- This edge rule is the interim answer while we stay on Pages. The Pages -> Workers migration above is what eventually moves the per-IP limit in-code onto the native Rate Limiting binding (`rate-limit.ts` is already written for it); the WAF rule and the binding can also coexist, edge as the outer floor and the binding as the inner one.
 
 ### WAF custom rules (free, unlimited)
 
@@ -57,10 +86,6 @@ Separate from rate limiting, WAF custom rules are free and unlimited on all plan
 - Block unexpected HTTP methods / paths on the API surface.
 - Challenge or block requests missing headers a real browser client always sends.
 - Block known-bad ASNs/bots if a pattern emerges from the D1 usage monitoring.
-
-### Turnstile on email-request
-
-Add Turnstile to the `email-request` flow for stronger bot resistance. This is the highest-leverage addition after the rate-limit rule: sending an e-mail is the one action that costs *us* money and reputation per request and can be used to spam third parties. A rate limit only slows it; Turnstile makes automated abuse structurally hard and directly protects the email-code D1 tables from random-address flooding (see D1 item 5). The `turnstile-spin` skill can help wire it up.
 
 ### D1 cost audit (free-tier headroom)
 
