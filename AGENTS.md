@@ -14,3 +14,14 @@
 
 - After implementing, run all testing that does not require spinning up a browser: the test suite, typecheck, build, and any API or function-level checks.
 - Run `pnpm build` **before** `pnpm test`. The `integration` vitest project boots a real local Worker from `wrangler.toml` and serves the built `dist/`, so a stale or missing build makes those tests fail or test the wrong thing. `pnpm vitest run --project unit` skips them when you only need the fast suite.
+
+## Tests
+
+Two vitest projects, split by cost rather than by runtime (`vitest.config.ts`):
+
+- **`unit`** (`src/**`, `worker/**/*.test.ts`): pure logic and the Hono app driven in-process via `app.request()` with a fake `DB`. Sub-second.
+- **`integration`** (`test/**/*.integration.test.ts`): boots real infrastructure. `routing.integration.test.ts` starts a local Worker from `wrangler.toml` so the static-assets router is in front of it; the rest get a throwaway D1 database with the real `migrations/` applied, via `test/support/d1.ts`.
+
+Anything whose correctness lives in SQL belongs in the `integration` project. The sync engine's last-write-wins, immutable coordinates and per-user ownership are all WHERE clauses in one conditional upsert, and the e-mail-code abuse limits are all ON CONFLICT / CASE logic. A fake `DB.prepare` can only assert which strings were passed to it, which tests none of that.
+
+`test/` has its own `tsconfig.test.json` because those files run in Node and need `@types/node`. `tsconfig.worker.json` deliberately does **not** have Node types, so it stays the check that stops worker code reaching for a Node builtin that would not exist at the edge.

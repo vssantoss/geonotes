@@ -21,14 +21,13 @@ export default defineConfig({
         test: {
           name: 'unit',
           include: ['src/**/*.test.{ts,tsx}', 'worker/**/*.test.ts'],
-          exclude: ['worker/**/*.integration.test.ts'],
         },
       },
       {
         extends: './vite.config.ts',
         test: {
           name: 'integration',
-          include: ['worker/**/*.integration.test.ts'],
+          include: ['test/**/*.integration.test.ts'],
           // Booting the dev worker is slow enough to trip the default timeout on
           // a cold start.
           testTimeout: 30_000,
