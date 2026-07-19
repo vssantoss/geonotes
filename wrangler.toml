@@ -1,15 +1,27 @@
-# Cloudflare Pages configuration.
-# Victor: after creating the D1 database in the Cloudflare dashboard or via
-# `pnpm wrangler d1 create geonotes`, paste the real database_id below.
-# Also set the challenge-signing secret once (any long random string):
-#   pnpm wrangler pages secret put AUTH_SECRET --project-name=geonotes
+# Cloudflare Worker configuration (Worker + static assets).
+# Set the secrets once each (no --project-name; these target the Worker named
+# below):
+#   pnpm wrangler secret put AUTH_SECRET
+#   pnpm wrangler secret put RESEND_API_KEY
+#   pnpm wrangler secret put TURNSTILE_SECRET
 # Apply the schema with:
 #   local:  pnpm wrangler d1 migrations apply geonotes --local
 #   remote: pnpm wrangler d1 migrations apply geonotes --remote
 
-name = "geonotes"
+# Deliberately not "geonotes": that name belongs to the Pages project this
+# replaced, which stays deployed and reachable during the cutover so rolling
+# back is just deleting the Worker route. Only affects the workers.dev
+# subdomain; production traffic arrives via the custom hostname.
+name = "geonotes-worker"
+main = "worker/index.ts"
 compatibility_date = "2026-07-01"
-pages_build_output_dir = "dist"
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+# Deep links are client-routed, so anything that is not a built asset must come
+# back as index.html. Pages did this implicitly; on Workers it is explicit.
+not_found_handling = "single-page-application"
 
 [vars]
 ENVIRONMENT = "production"
@@ -22,6 +34,21 @@ binding = "DB"
 database_name = "geonotes"
 database_id = "0fda6ffd-fc0e-49e1-900a-c421b64309e4"
 
-# No rate-limit binding: the native Rate Limiting binding is Workers-only and is
-# rejected by wrangler for Pages projects. Per-IP throttling for /api/auth/* is
-# handled by a WAF Rate Limiting Rule on the gnotes.vshub.app zone (see TODO.md).
+# Per-IP throttle for /api/auth/*, enforced by enforceAuthAbuseLimit. This is
+# per-colo and eventually consistent, so it is the cheap inner layer that fails
+# fast before D1, NOT a replacement for the zone's WAF Rate Limiting Rule. Keep
+# both. namespace_id is an arbitrary account-unique integer, not provisioned
+# anywhere; period only accepts 10 or 60.
+[[ratelimits]]
+name = "AUTH_RATE_LIMITER"
+namespace_id = "1001"
+simple = { limit = 20, period = 60 }
+
+# Daily sweep of accounts past their 30-day deletion grace window, plus expired
+# e-mail codes. Pages had no cron, which is why these used to ride on
+# email-request.
+[triggers]
+crons = ["17 4 * * *"]
+
+[observability]
+enabled = true

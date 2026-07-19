@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "wrangler pages dev dist",
+    "preview": "wrangler dev --port 8788 --ip 0.0.0.0",
+    "deploy": "pnpm build && wrangler deploy",
     "test": "vitest run",
     "typecheck": "tsc -b"
   },
@@ -19,6 +20,7 @@
     "clsx": "2.1.1",
     "dexie": "4.4.4",
     "dexie-react-hooks": "4.4.0",
+    "hono": "4.12.31",
     "lucide-react": "1.24.0",
     "radix-ui": "1.6.2",
     "react": "19.2.7",

@@ -51,9 +51,9 @@ export async function requestAccountDeletion(
  * Permanently removes every account whose deletion grace window has elapsed,
  * along with all of its data.
  *
- * Runs as an opportunistic background sweep (via waitUntil off the response
- * path), mirroring the codebase's other TTL prunes, since Cloudflare Pages has
- * no cron trigger. Child rows are deleted before the user rows so the doomed set
+ * Runs from the Worker's daily cron trigger. It used to piggyback on
+ * email-request via waitUntil, which only stood in for a scheduled job while the
+ * app ran on Pages. Child rows are deleted before the user rows so the doomed set
  * is still resolvable through deletion_requested_at, and the address-keyed
  * e-mail tables are cleared too, leaving nothing behind. The whole sweep is one
  * atomic batch, so a partial failure never leaves an account half-deleted.
