@@ -1,4 +1,4 @@
-# Local development config for wrangler pages dev. Copy to .dev.vars (gitignored).
+# Local development config for wrangler dev. Copy to .dev.vars (gitignored).
 ENVIRONMENT=dev
 RP_ID=localhost
 ORIGIN=http://localhost:5173

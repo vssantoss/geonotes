@@ -1,4 +1,4 @@
-// Types shared between the web app (src/) and the Pages Functions (worker/).
+// Types shared between the web app (src/) and the Worker (worker/).
 
 /** A location-pinned note. Ids are client-generated UUIDs so notes can be created offline. */
 export interface Note {
