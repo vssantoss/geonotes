@@ -6,7 +6,7 @@ import type { Note, SyncOp, SyncRequest, SyncResponse } from '../../shared/types
 export type SyncStatus = 'idle' | 'syncing' | 'error' | 'unauthorized' | 'revoked'
 
 /** 401 body the server sends when the session was explicitly revoked from
-    another device (see SESSION_REVOKED_REASON in functions/_lib/session.ts).
+    another device (see SESSION_REVOKED_REASON in worker/_lib/session.ts).
     Distinct from a plain expiry: it triggers a full local wipe, not just a
     re-sign-in prompt. Kept in sync with the server literal by contract. */
 const SESSION_REVOKED_REASON = 'session_revoked'
