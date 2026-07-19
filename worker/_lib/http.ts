@@ -1,3 +1,18 @@
+import type { Context } from 'hono'
+
+/**
+ * Security headers applied to every API response.
+ *
+ * public/_headers only covers static assets under Workers (unlike Pages, where
+ * it also covered Functions output), so API responses have to carry their own.
+ * Only the two that mean anything for a non-HTML body are set here: nosniff, and
+ * a referrer policy so an API URL never leaks onward.
+ */
+const API_SECURITY_HEADERS = {
+  'Referrer-Policy': 'no-referrer',
+  'X-Content-Type-Options': 'nosniff',
+}
+
 /**
  * Builds a JSON response.
  *
@@ -9,6 +24,7 @@ export function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
+      ...API_SECURITY_HEADERS,
       'Cache-Control': 'no-store',
       'Content-Type': 'application/json',
     },
@@ -26,6 +42,7 @@ export function error(status: number, message: string): Response {
   return new Response(message, {
     status,
     headers: {
+      ...API_SECURITY_HEADERS,
       'Cache-Control': 'no-store',
       'Content-Type': 'text/plain; charset=UTF-8',
     },
@@ -71,19 +88,47 @@ export function hasTrustedOrigin(request: Request, expectedOrigin: string): bool
 }
 
 /**
+ * The slice of the old Pages EventContext that route handlers actually use.
+ * Keeping this shape is what let every route body survive the move off Pages
+ * Functions unchanged: only this wrapper knows it is now driven by Hono.
+ */
+export interface RouteContext<E extends RouteEnv> {
+  env: E
+  request: Request
+  params: Record<string, string | undefined>
+  waitUntil: (promise: Promise<unknown>) => void
+}
+
+/**
  * Wraps a route handler so HttpError becomes a proper response and anything
- * unexpected becomes an opaque 500.
+ * unexpected becomes an opaque 500, and adapts the Hono context into the
+ * EventContext-shaped object the handlers expect.
  *
  * @param handler - the actual route logic.
- * @returns a PagesFunction-compatible handler.
+ * @returns a Hono-compatible handler.
  */
 export function route<E extends RouteEnv>(
-  handler: (ctx: EventContext<E, string, unknown>) => Promise<Response>,
-): (ctx: EventContext<E, string, unknown>) => Promise<Response> {
-  return async (ctx) => {
+  handler: (ctx: RouteContext<E>) => Promise<Response>,
+): (c: Context<{ Bindings: E }>) => Promise<Response> {
+  return async (c) => {
     try {
-      requireTrustedOrigin(ctx.env, ctx.request)
-      return await handler(ctx)
+      requireTrustedOrigin(c.env, c.req.raw)
+      return await handler({
+        env: c.env,
+        request: c.req.raw,
+        params: c.req.param() as Record<string, string | undefined>,
+        waitUntil: (promise) => {
+          // executionCtx throws when the app is driven without one, which is how
+          // the router tests call it. Background work is best-effort either way,
+          // so fall back to firing and forgetting rather than failing the
+          // request that scheduled it.
+          try {
+            c.executionCtx.waitUntil(promise)
+          } catch {
+            void promise.catch((err) => console.error(err))
+          }
+        },
+      })
     } catch (err) {
       if (err instanceof HttpError) return error(err.status, err.message)
       console.error(err)

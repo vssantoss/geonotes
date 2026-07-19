@@ -5,10 +5,12 @@ import type { Env } from './env'
 /**
  * Applies the shared authentication abuse limit to the request source.
  *
- * The native Rate Limiting binding is a Workers-only feature and is absent on
- * Cloudflare Pages, where per-IP throttling is instead enforced by a WAF Rate
- * Limiting Rule on the zone (see TODO.md). When the binding is not present we
- * skip the in-code check so the auth routes keep working rather than 500ing.
+ * The binding is per-colo and eventually consistent, so an attacker spread
+ * across colos gets the limit several times over. It is the cheap inner layer
+ * that rejects before any D1 access; the zone's WAF Rate Limiting Rule remains
+ * the global outer one. When the binding is not present (unit tests, a
+ * stripped-down local config) we skip the check so the auth routes keep working
+ * rather than 500ing.
  *
  * @param env - function environment.
  * @param request - incoming authentication request.

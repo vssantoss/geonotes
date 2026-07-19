@@ -1,6 +1,5 @@
 import { json, HttpError, route } from '../../_lib/http'
 import { claimEmailCodeRequest, issueEmailCode, pruneExpiredEmailCodes } from '../../_lib/email-code'
-import { purgeExpiredDeletedAccounts } from '../../_lib/account-deletion'
 import { getEmailSender } from '../../_lib/email'
 import { enforceAuthAbuseLimit } from '../../_lib/rate-limit'
 import { verifyTurnstile } from '../../_lib/turnstile'
@@ -43,11 +42,6 @@ export const onRequestPost = route<Env>(async ({ env, request, waitUntil }) => {
   // amortized onto the same requests that grow those tables. Runs after the
   // response so it never adds latency, and never affects this request's result.
   waitUntil(pruneExpiredEmailCodes(env, now))
-  // Same background lane sweeps accounts whose 30-day deletion grace window has
-  // elapsed. Cloudflare Pages has no cron trigger, so this stands in for a
-  // scheduled job; the partial index on deletion_requested_at keeps it cheap
-  // when nothing is due.
-  waitUntil(purgeExpiredDeletedAccounts(env, now))
   const withinAccountLimit = await claimEmailCodeRequest(env, email, now)
 
   if (mode === 'recover') {

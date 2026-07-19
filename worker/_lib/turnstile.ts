@@ -46,7 +46,9 @@ export async function verifyTurnstile(env: Env, token: unknown, request: Request
   const ip = request.headers.get('CF-Connecting-IP')
   if (ip) form.append('remoteip', ip)
 
-  let outcome: { success?: boolean } | null = null
+  // Not initialised: the catch below always throws, so the only path that
+  // reaches the check has assigned it.
+  let outcome: { success?: boolean }
   try {
     const res = await fetch(SITEVERIFY_URL, { method: 'POST', body: form })
     outcome = (await res.json()) as { success?: boolean }
@@ -55,5 +57,5 @@ export async function verifyTurnstile(env: Env, token: unknown, request: Request
     // verifier is unreachable is no control at all.
     throw new HttpError(403, 'turnstile verification failed')
   }
-  if (!outcome?.success) throw new HttpError(403, 'turnstile rejected')
+  if (!outcome.success) throw new HttpError(403, 'turnstile rejected')
 }

@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo",
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    // Node types for the harness (it reads the migration files off disk), plus
+    // the Workers globals the code under test is written against.
+    "types": ["node", "@cloudflare/workers-types"],
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
+  },
+  // The worker and shared sources are inputs because the tests import them.
+  // They are also checked by tsconfig.worker.json, which is the stricter of the
+  // two: that project has no Node types, so it is what stops worker code from
+  // reaching for a Node builtin that would not exist at the edge.
+  "include": ["test", "worker", "shared"]
+}

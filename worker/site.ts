@@ -10,7 +10,7 @@ const MANIFEST_PATH = '/manifest.webmanifest'
 const DEV_NAME = 'GeoNotes Dev'
 
 /**
- * Root Pages middleware that labels non-production installs "GeoNotes Dev" so a
+ * Serves the static site, labelling non-production installs "GeoNotes Dev" so a
  * staging install is visibly distinct from production on the home screen
  * (neither Android nor iOS offers a rename prompt at install time). A single
  * build serves both: the name is decided per request from env.ORIGIN, so no
@@ -22,18 +22,22 @@ const DEV_NAME = 'GeoNotes Dev'
  * document <title>). So off production we rewrite both the manifest JSON and the
  * HTML document; on production every request passes straight through untouched.
  *
- * @param context - the Pages request context (request, env, next).
- * @returns the response, name-patched when off production.
+ * This is the router's catch-all: API paths are matched earlier and never reach
+ * it. Unmatched paths come back from the assets binding as index.html with a 200
+ * (not_found_handling = single-page-application), so deep links get the same
+ * rewrite treatment as the root document.
+ *
+ * @param env - worker environment, for ORIGIN and the assets binding.
+ * @param request - the incoming request.
+ * @returns the asset response, name-patched when off production.
  */
-export const onRequest: PagesFunction<Env> = async (context) => {
-  const { request, env, next } = context
-
+export async function serveSite(env: Env, request: Request): Promise<Response> {
   // Production keeps its real name everywhere: skip all work, including the
   // per-request URL parse, for the origin that is by far the busiest.
-  if (env.ORIGIN === PRODUCTION_ORIGIN) return next()
+  if (env.ORIGIN === PRODUCTION_ORIGIN) return env.ASSETS.fetch(request)
 
   const url = new URL(request.url)
-  const response = await next()
+  const response = await env.ASSETS.fetch(request)
 
   // Android/Chrome home-screen label comes from the manifest short_name.
   if (url.pathname === MANIFEST_PATH) {
