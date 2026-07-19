@@ -13,3 +13,4 @@
 ## Verification
 
 - After implementing, run all testing that does not require spinning up a browser: the test suite, typecheck, build, and any API or function-level checks.
+- Run `pnpm build` **before** `pnpm test`. The `integration` vitest project boots a real local Worker from `wrangler.toml` and serves the built `dist/`, so a stale or missing build makes those tests fail or test the wrong thing. `pnpm vitest run --project unit` skips them when you only need the fast suite.
