@@ -22,6 +22,13 @@ binding = "ASSETS"
 # Deep links are client-routed, so anything that is not a built asset must come
 # back as index.html. Pages did this implicitly; on Workers it is explicit.
 not_found_handling = "single-page-application"
+# A request matching a real file is answered by the asset server without ever
+# invoking the Worker, which would silently skip serveSite's non-production
+# renaming for exactly the two documents that carry the name (a deep link still
+# reached it, via the SPA fallback above, so the bug showed up only on the paths
+# users actually install from). Listing them here forces the Worker to run first.
+# Everything else, including all content-hashed assets, keeps the direct path.
+run_worker_first = ["/*", "!/assets/*"]
 
 [vars]
 ENVIRONMENT = "production"
