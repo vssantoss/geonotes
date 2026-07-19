@@ -15,6 +15,7 @@ import {
 } from '../lib/auth'
 import { ApiError } from '../lib/api'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { TurnstileWidget, TURNSTILE_SITEKEY } from '../components/TurnstileWidget'
 import { useT } from '../lib/i18n'
 import { useCooldown } from '../hooks/useCooldown'
 
@@ -67,6 +68,12 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
   // Countdown mirroring the server's per-address resend cooldown, so the resend
   // button shows when another code can be requested.
   const resendCooldown = useCooldown(RESEND_COOLDOWN_MS)
+  // Current Turnstile token (null until the widget solves), and a counter the
+  // send handler bumps to re-challenge after a token is spent. Only meaningful
+  // when a sitekey is configured; otherwise the server skips verification.
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
+  const [turnstileReset, setTurnstileReset] = useState(0)
+  const turnstileRequired = TURNSTILE_SITEKEY !== ''
 
   /**
    * Runs a passkey login ceremony, then either applies it or, when it would
@@ -139,7 +146,7 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
     setCode('')
     setEnrollToken(null)
     try {
-      const { devCode: dev } = await requestEmailCode(email, mode)
+      const { devCode: dev } = await requestEmailCode(email, mode, turnstileToken)
       setDevCode(dev ?? null)
       setStep('code')
       // A code went out (or, in recover mode, the request was accepted): begin
@@ -156,6 +163,13 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
       }
     } finally {
       setBusy(false)
+      // The token was single-use and is now spent (siteverify runs before the
+      // server's cooldown check). Discard it and re-challenge so a resend on the
+      // code step gets a fresh token.
+      if (turnstileRequired) {
+        setTurnstileToken(null)
+        setTurnstileReset((n) => n + 1)
+      }
     }
   }
 
@@ -287,11 +301,21 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
               autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && emailValid && !busy && void sendCode()}
+              onKeyDown={(e) =>
+                e.key === 'Enter' &&
+                emailValid &&
+                !busy &&
+                (!turnstileRequired || turnstileToken) &&
+                void sendCode()
+              }
               className="bg-card"
             />
           </label>
-          <Button disabled={!emailValid || busy} onClick={() => void sendCode()}>
+          <TurnstileWidget onToken={setTurnstileToken} resetSignal={turnstileReset} />
+          <Button
+            disabled={!emailValid || busy || (turnstileRequired && !turnstileToken)}
+            onClick={() => void sendCode()}
+          >
             {t('auth.sendCode')}
           </Button>
           <Button
@@ -333,9 +357,14 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
           <Button disabled={!codeValid || busy} onClick={() => void submitCode()}>
             {t('auth.createPasskey')}
           </Button>
+          {/* Resend re-hits email-request, which also needs a Turnstile token, so
+              a fresh challenge runs here for a possible resend. */}
+          <TurnstileWidget onToken={setTurnstileToken} resetSignal={turnstileReset} />
           <Button
             variant="ghost"
-            disabled={busy || resendCooldown.remainingMs > 0}
+            disabled={
+              busy || resendCooldown.remainingMs > 0 || (turnstileRequired && !turnstileToken)
+            }
             onClick={() => void sendCode()}
           >
             {resendCooldown.remainingMs > 0

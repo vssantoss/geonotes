@@ -21,7 +21,10 @@ export default defineConfig({
         short_name: 'GeoNotes',
         description: 'Short notes tied to the places where they matter.',
         theme_color: '#f1f2eb',
-        background_color: '#f1f2eb',
+        // Matches the logo's red rounded-square so the Android PWA splash
+        // screen (which fills with background_color behind the icon) is the
+        // same red as the mark rather than a white field.
+        background_color: '#b91c1c',
         display: 'standalone',
         orientation: 'portrait',
         icons: [

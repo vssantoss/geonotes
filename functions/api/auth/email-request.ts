@@ -3,6 +3,7 @@ import { claimEmailCodeRequest, issueEmailCode, pruneExpiredEmailCodes } from '.
 import { purgeExpiredDeletedAccounts } from '../../_lib/account-deletion'
 import { getEmailSender } from '../../_lib/email'
 import { enforceAuthAbuseLimit } from '../../_lib/rate-limit'
+import { verifyTurnstile } from '../../_lib/turnstile'
 import type { Env } from '../../_lib/env'
 
 /**
@@ -25,10 +26,18 @@ import type { Env } from '../../_lib/env'
 export const onRequestPost = route<Env>(async ({ env, request, waitUntil }) => {
   await enforceAuthAbuseLimit(env, request)
   const body = (await request.json().catch(() => null)) as
-    | { email?: unknown; mode?: unknown }
+    | { email?: unknown; mode?: unknown; turnstileToken?: unknown }
     | null
   const email = normalizeEmail(body?.email)
   const mode = body?.mode === 'recover' ? 'recover' : 'create'
+  // Prove the caller is human before any D1 access below, so a bot with no valid
+  // token never reaches the database (and cannot make us send an e-mail). No-op
+  // until TURNSTILE_SECRET is configured. Applies to both create and recover; it
+  // runs before the account lookup, so it leaks nothing about which addresses
+  // exist. Kept before normalizeEmail's throw would matter little, but placed
+  // after it so an obviously bad e-mail still short-circuits without a siteverify
+  // round trip.
+  await verifyTurnstile(env, body?.turnstileToken, request)
   const now = Date.now()
   // Opportunistic TTL eviction of expired codes and lapsed rate-limit windows,
   // amortized onto the same requests that grow those tables. Runs after the
