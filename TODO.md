@@ -27,8 +27,10 @@ Every `wrangler` command below needs the API token first: `set -a; . ~/dev/.clou
 7. **Add a Worker Route `gnotes.vshub.app/*` -> `geonotes-worker`.** A Route, not a Custom Domain: a Custom Domain cannot be attached while Pages holds the hostname, which would force a detach-then-attach with a real DNS gap. A Route sits in front of the existing Pages domain with DNS untouched, takes effect in seconds, and **rolls back by deleting the route**. This is the moment production traffic moves.
 8. **Verify production on `gnotes.vshub.app`:** the manifest says "GeoNotes" (not "GeoNotes Dev"), an existing session is still signed in, passkey login and registration both work, e-mail sign-in works, sync works, session revoke works, deletion request works. Watch `wrangler tail` for 500s.
    **PARTLY DONE 2026-07-20.** Working: passkey registration and login, e-mail sign-in, the Turnstile widget rendering on the sign-in screen. Passkeys enrolled under the *old* `AUTH_SECRET` on Pages still log in, which is expected: that secret only signs the 10-minute e-mail enroll token, never the credential (see `worker/_lib/enroll.ts`).
-   Still unverified: manifest string, existing-session survival, sync, session revoke, deletion request, `wrangler tail` during all of it. Tracked in `PENDING.md` section 6.
+   Also working as of the same date: sync, session revoke, account-deletion request.
+   Still unverified: the manifest string, and whether a session created before the cutover survived it. That second one expires as a question, since sessions live seven days.
 9. **Verify the PWA install label** on Android and iOS, on both production ("GeoNotes") and staging ("GeoNotes Dev"). This is the one thing the test suite cannot check.
+   **PARTLY DONE 2026-07-20.** Android verified correct on both. iOS still unchecked; it takes a different code path (the `HTMLRewriter` apple-meta block in `worker/site.ts`), so Android passing does not imply it.
 10. **Soak for a few days**, watching `wrangler tail` and D1 usage.
 11. **Retire Pages.** As a separate, low-stakes change: swap the Route for a proper Custom Domain (this is the step that needs the Pages detach), then delete the `geonotes` Pages project.
 

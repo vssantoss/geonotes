@@ -114,11 +114,11 @@ The connection is now live and has deployed to production twice (once broken, on
 
 ## 6. Verification that only you can do (browser work)
 
-- [ ] PWA install label on **Android**: production must read "GeoNotes", staging "GeoNotes Dev".
+- [x] ~~PWA install label on **Android**: production must read "GeoNotes", staging "GeoNotes Dev".~~ **DONE 2026-07-20, both correct.**
 - [ ] PWA install label on **iOS**, same check. This is the one thing no test can cover, and it is exactly what silently broke once already when assets bypassed the Worker.
-- [ ] An existing session is still signed in after the cutover.
-- [ ] Sync, session revoke, and account-deletion request all still work on production.
-- [ ] Watch `wrangler tail` for 500s during the above.
+- [ ] **An existing session is still signed in after the cutover. This one expires as a question.** Sessions live seven days (`session.ts:6`), so once every pre-cutover session has aged out there is nothing left to test and the check can never be answered. If you have not already confirmed it on a device you had signed in before 2026-07-19, close this as untestable rather than leaving it open.
+- [x] ~~Sync, session revoke, and account-deletion request all still work on production.~~ **DONE 2026-07-20, all three working.** If the deletion request was left standing on a real account, note that it is a 30-day grace mark, not an immediate delete, and that signing in cancels it: `createSession` clears `deletion_requested_at` on every successful new session (`session.ts`). So an account used for testing this un-marks itself the next time you log in.
+- [ ] Watch `wrangler tail` for 500s during the above. Largely overtaken now that the flows are confirmed working; useful during the cron's first runs instead.
 - [x] ~~**The Turnstile widget actually renders on the sign-in screen.**~~ **DONE 2026-07-20, working.** This closes out section 1. Worth keeping the note on why it needed a human: `curl` cannot produce a Turnstile token, so it always sees `403 turnstile required` whether the widget works or not. Only a real browser settles it.
 
 - [x] ~~E-mail sign-in end to end.~~ **DONE 2026-07-20, working.**
