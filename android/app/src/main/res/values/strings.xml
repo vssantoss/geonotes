@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">GeoNotes</string>
+    <string name="title_activity_main">GeoNotes</string>
+    <string name="package_name">app.vshub.gnotes</string>
+    <string name="custom_url_scheme">app.vshub.gnotes</string>
+</resources>

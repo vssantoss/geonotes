@@ -13,6 +13,8 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@capacitor/android": "8.4.2",
+    "@capacitor/core": "8.4.2",
     "@fontsource-variable/bricolage-grotesque": "5.2.10",
     "@simplewebauthn/browser": "13.3.0",
     "@simplewebauthn/server": "13.3.2",
@@ -30,6 +32,7 @@
     "tailwindcss": "4.3.2"
   },
   "devDependencies": {
+    "@capacitor/cli": "8.4.2",
     "@cloudflare/workers-types": "5.20260711.1",
     "@eslint/js": "10.0.1",
     "@types/node": "26.1.1",
