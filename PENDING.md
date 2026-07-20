@@ -29,16 +29,23 @@ Routing checks all pass: SPA root 200 html, deep link `/settings/some/deep/path`
 | Cron | `17 4 * * *` (04:17 UTC), registered, **has not fired yet** as of writing |
 | Worker secrets | `AUTH_SECRET`, `RESEND_API_KEY`, `TURNSTILE_SECRET`, all three set and verified |
 | Pages project | `geonotes` still exists, now only `geonotes-49a.pages.dev`, Git Provider `No` |
-| Workers Builds | connected to `vssantoss/geonotes`, **has never run a build** |
+| Workers Builds | connected to `vssantoss/geonotes`, production branch `main`, **now building and deploying on push** |
+
+**Deploys now happen on push to `main`.** Workers Builds runs `pnpm run build` then `npx wrangler deploy`. This is no longer a repo where pushing is a safe, inert act: a push to `main` is a production deploy. The active version at the time of writing is `d80de318`, deployed by a build.
 
 ---
 
 ## 1. Blocking / do before the next push
 
-- [ ] **Confirm `VITE_TURNSTILE_SITEKEY` is set in the Workers Builds variables.** You said you added it; verify it is spelled exactly `VITE_TURNSTILE_SITEKEY` and that the value is `0x4AAAAAAD4sfOQnJvefAn8M` (this is the value baked into the currently deployed bundle, recovered by grepping the live JS).
-  **Why this is first:** it is the one thing that silently breaks a working feature. `.env` is gitignored, so the sitekey is not in the repo. Without it the build produces `TURNSTILE_SITEKEY = ''` (`TurnstileWidget.tsx:12` falls back to `?? ''`), the widget never renders, the client sends no token, and because `TURNSTILE_SECRET` **is** set on the Worker, `verifyTurnstile` treats the token as mandatory and throws 403. Every e-mail sign-in and account creation would fail while passkey login kept working, which makes it easy to misdiagnose.
-  It is a build-time variable, not a runtime secret, which is why the Worker's own secrets do not cover it. A plain variable is correct: Turnstile sitekeys are public by design and this one is already readable in the shipped bundle.
-  The code documents this exact trap in `worker/_lib/turnstile.ts`: set the sitekey at build time *before* setting the secret, or genuine requests arrive tokenless.
+- [x] ~~**Confirm `VITE_TURNSTILE_SITEKEY` is set in the Workers Builds variables.**~~ **DONE 2026-07-20. It went wrong first, then was fixed. Worth reading, because the failure mode is subtle and will recur if the variable is ever moved.**
+  - **The trap:** `.env` is gitignored, so the sitekey is not in the repo. Without it the build produces `TURNSTILE_SITEKEY = ''` (`TurnstileWidget.tsx:12` falls back to `?? ''`), the widget never renders, the client sends no token, and because `TURNSTILE_SECRET` **is** set on the Worker, `verifyTurnstile` treats the token as mandatory and throws 403. E-mail sign-in and account creation break while passkey login keeps working, which makes it easy to misdiagnose. `worker/_lib/turnstile.ts` documents this exact trap: set the sitekey at build time *before* setting the secret.
+  - **What went wrong:** the variable was first added as a **Worker runtime binding**, where it sat next to `DB` and `AUTH_SECRET`. That cannot work. `import.meta.env.VITE_TURNSTILE_SITEKEY` is substituted by Vite **inside the build container**, and the result is baked into the JS the browser downloads. A runtime binding is invisible to `vite build`. The two settings pages use the same words ("Variables and secrets") for completely different things.
+  - **Where it belongs:** Workers Builds -> Build configuration -> Variables and secrets. **Plaintext, not encrypted.** A Turnstile sitekey is public by design (it is the browser half; `TURNSTILE_SECRET` is the server half) and is already readable in the shipped bundle. Encrypting it would hide it from you and nobody else, and would create a second unrecoverable value.
+  - **General rule:** anything prefixed `VITE_` is compiled into the browser bundle and can never be secret, however it is stored. A real secret with a `VITE_` prefix is a bug, not a storage question.
+  - **Value:** `0x4AAAAAAD4sfOQnJvefAn8M`. Recoverable at any time by grepping the deployed JS, so it needs no backup.
+  - **Verified fixed** by asset hash: production went `index-CAhocl1U.js` -> `index-D43w3Mfo.js` (the bad build) -> back to `index-CAhocl1U.js`, byte-identical to a local build made from `.env`. Content-hashed filenames can only match if the content matches. Direct grep of the served 495KB asset confirms one occurrence of the sitekey.
+  - The stray runtime binding was afterwards deleted from the Worker. Latest version `d80de318` is live at 100% with the nine correct bindings and no `VITE_TURNSTILE_SITEKEY`.
+  - **Two probes I used during this were bad; do not reuse them.** `curl -X POST /api/auth/email-request` returns `403 turnstile required` **always**, because curl cannot produce a Turnstile token, so it can never distinguish broken from working. And `curl ... | grep | head -1` on a large asset can truncate the stream and report a false negative; write the asset to a file and grep the file. The asset hash is the reliable signal.
 
 - [ ] **Test passkey register and login on `https://gnotes.vshub.app`.** The highest-risk untested path. `AUTH_SECRET` was rotated (see section 3), and signed WebAuthn challenge tokens are the *only* thing that secret protects. If it is wrong, ceremonies fail. Existing sessions are unaffected either way, because they are opaque D1 tokens and are not signed.
   This cannot be tested anywhere but the production hostname: `RP_ID` and the CSRF origin check both name it. Failures on `workers.dev` are expected and are not a bug.
@@ -75,11 +82,15 @@ Routing checks all pass: SPA root 200 html, deep link `/settings/some/deep/path`
 
 ## 4. Workers Builds configuration
 
-The connection to `vssantoss/geonotes` exists but **has never run a build**, so none of the below has been exercised yet. The first push to `main` is the live test.
+The connection is now live and has deployed to production twice (once broken, once fixed). Build command `pnpm run build`, deploy command `npx wrangler deploy`, production branch `main`, watch paths `*`.
+
+- [x] ~~First build exercised.~~ **DONE 2026-07-20.** It shipped a broken bundle on the first run, for the sitekey reason in section 1. Fixed and reverified.
+
+- [ ] **Remember that a CLI `pnpm run deploy` and a build deploy can disagree.** `wrangler deploy` sets the Worker's bindings from `wrangler.toml`, so anything added by hand in the dashboard and not present in that file is wiped on the next CLI deploy. That is how the stray `VITE_TURNSTILE_SITEKEY` runtime binding would have vanished on its own. Treat `wrangler.toml` as the source of truth for runtime config, and the Workers Builds variables as the source of truth for build-time config.
 
 - [ ] **Decide whether non-production branch builds should stay enabled.** They are currently on, with build watch paths `*`, so *every push to any branch* runs `npx wrangler versions upload`. Those preview versions bind the **same production `database_id`**, and each gets a publicly reachable preview URL pointing at live data. That is the `pages.dev` parallel-path hazard again, but one per branch and created automatically. Either disable non-production builds or accept it knowingly.
 
-- [ ] **Consider adding tests to the build command.** It is currently `pnpm run build`, with deploy `npx wrangler deploy`. `pnpm run build` runs `tsc -b`, so typecheck is covered, but **nothing runs the 135 tests or the lint gate**. A push to `main` deploys whatever compiles. Candidate: `pnpm run lint && pnpm run build`. Note the integration tests need a built `dist/` and boot a real Worker, so wiring the full suite into a CI build needs thought rather than being dropped in.
+- [ ] **Consider adding tests to the build command. This matters more now that a push deploys.** It is currently `pnpm run build`, with deploy `npx wrangler deploy`. `pnpm run build` runs `tsc -b`, so typecheck is covered, but **nothing runs the 135 tests or the lint gate**. A push to `main` deploys whatever compiles. The first automated build proved the point by shipping a broken bundle straight to production. Candidate: `pnpm run lint && pnpm run build`. Note the integration tests need a built `dist/` and boot a real Worker, so wiring the full suite into a CI build needs thought rather than being dropped in.
 
 - [ ] Build cache is disabled. Only costs build time. Enable if builds get slow.
 
@@ -102,6 +113,7 @@ The connection to `vssantoss/geonotes` exists but **has never run a build**, so 
 - [ ] An existing session is still signed in after the cutover.
 - [ ] Sync, session revoke, and account-deletion request all still work on production.
 - [ ] Watch `wrangler tail` for 500s during the above.
+- [ ] **The Turnstile widget actually renders on the sign-in screen.** This is the check that closes out section 1. No remote probe can do it: `curl` cannot produce a Turnstile token, so it always sees `403 turnstile required` whether the widget works or not. Only a real browser settles it.
 
 ---
 
