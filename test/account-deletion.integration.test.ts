@@ -4,7 +4,7 @@ import {
   purgeExpiredDeletedAccounts,
   requestAccountDeletion,
 } from '../worker/_lib/account-deletion'
-import { createSession, requireUser } from '../worker/_lib/session'
+import { createSession, requireUser, SESSION_REVOKED_REASON } from '../worker/_lib/session'
 import { claimEmailCodeRequest, issueEmailCode } from '../worker/_lib/email-code'
 import { createTestDb, insertUser, TEST_ORIGIN, type TestDb } from './support/d1'
 
@@ -88,8 +88,16 @@ describe('requesting deletion', () => {
     await requestAccountDeletion(ctx.env, USER, Date.now())
 
     // No device may stay authenticated against a doomed account, and dropping
-    // the passkeys forces reactivation through the e-mail recovery flow.
-    expect(await count('sessions', 'user_id', USER)).toBe(0)
+    // the passkeys forces reactivation through the e-mail recovery flow. The
+    // session rows survive as revoked tombstones on purpose: see the wipe test
+    // below for why deleting them outright would leave data on the devices.
+    const sessions = await ctx.env.DB.prepare(
+      'SELECT revoked_at FROM sessions WHERE user_id = ?',
+    )
+      .bind(USER)
+      .all<{ revoked_at: number | null }>()
+    expect(sessions.results).toHaveLength(2)
+    expect(sessions.results.every((row) => row.revoked_at !== null)).toBe(true)
     expect(await count('credentials', 'user_id', USER)).toBe(0)
   })
 
@@ -225,5 +233,22 @@ describe('sessions of a deleted account', () => {
 
     const request = new Request(`${TEST_ORIGIN}/api/sync`, { headers: { Cookie: cookie } })
     await expect(requireUser(ctx.env, request)).rejects.toMatchObject({ status: 401 })
+  })
+
+  it('tells the other devices to wipe, not merely that the session expired', async () => {
+    // The distinction is the whole point. A plain 401 leaves the notes of a
+    // deleted account sitting on every other device the user was signed in on,
+    // because the client keeps local data across an ordinary expiry and only
+    // wipes on SESSION_REVOKED_REASON (see the handler in src/lib/sync.ts).
+    const setCookie = await createSession(ctx.env, USER, new Request(`${TEST_ORIGIN}/api/sync`))
+    const cookie = setCookie.split(';')[0]
+
+    await requestAccountDeletion(ctx.env, USER, Date.now())
+
+    const request = new Request(`${TEST_ORIGIN}/api/sync`, { headers: { Cookie: cookie } })
+    await expect(requireUser(ctx.env, request)).rejects.toMatchObject({
+      status: 401,
+      message: SESSION_REVOKED_REASON,
+    })
   })
 })

@@ -17,7 +17,7 @@ export const DELETION_GRACE_MS = 30 * 24 * 60 * 60 * 1000
  *
  * The user row is kept (only stamped with the request time) so the address stays
  * reserved and the deletion can still be cancelled; the actual data removal
- * happens later in purgeExpiredDeletedAccounts. Every session is dropped so no
+ * happens later in purgeExpiredDeletedAccounts. Every session is revoked so no
  * device stays authenticated against a doomed account, and every credential is
  * dropped so reactivation must go through the e-mail "Recover account" flow
  * (which re-enrols a passkey and clears the mark) rather than a lingering
@@ -41,7 +41,14 @@ export async function requestAccountDeletion(
       now,
       userId,
     ),
-    env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(userId),
+    // Stamped as revoked rather than deleted, the same tombstone the explicit
+    // session-revoke endpoints leave. A deleted row is indistinguishable from a
+    // natural expiry, so the other devices would keep the doomed account's notes
+    // on disk; a tombstone makes requireUser answer SESSION_REVOKED_REASON, which
+    // is what drives the client to wipe its local copy. Deleting an account must
+    // clear devices at least as thoroughly as signing one out remotely does.
+    env.DB.prepare('UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL')
+      .bind(now, userId),
     env.DB.prepare('DELETE FROM credentials WHERE user_id = ?').bind(userId),
   ])
   return results[0]?.results[0]?.email ?? null
