@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
+  ABANDONED_ACCOUNT_TTL_MS,
   DELETION_GRACE_MS,
+  purgeAbandonedAccounts,
   purgeExpiredDeletedAccounts,
   requestAccountDeletion,
 } from '../worker/_lib/account-deletion'
@@ -221,6 +223,152 @@ describe('purging after the grace window', () => {
     await expect(purgeExpiredDeletedAccounts(ctx.env, Date.now())).resolves.toBeUndefined()
 
     expect(await count('users', 'id', USER)).toBe(1)
+  })
+})
+
+/**
+ * Overwrites a user's creation timestamp, so a test can age an account past the
+ * abandonment cutoff without waiting.
+ *
+ * @param userId The account to backdate.
+ * @param createdAt The creation timestamp to set.
+ * @returns Nothing.
+ */
+async function setUserCreatedAt(userId: string, createdAt: number): Promise<void> {
+  await ctx.db
+    .prepare('UPDATE users SET created_at = ? WHERE id = ?')
+    .bind(createdAt, userId)
+    .run()
+}
+
+/**
+ * Inserts a session row with an explicit creation time, standing in for a login
+ * at that moment.
+ *
+ * @param userId Owner of the session.
+ * @param tokenHash Unique session token hash.
+ * @param createdAt When the session (login) was created.
+ * @returns Nothing.
+ */
+async function insertSession(userId: string, tokenHash: string, createdAt: number): Promise<void> {
+  await ctx.db
+    .prepare('INSERT INTO sessions (token_hash, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)')
+    .bind(tokenHash, userId, createdAt + DELETION_GRACE_MS, createdAt)
+    .run()
+}
+
+/**
+ * Inserts a note owned by a user.
+ *
+ * @param userId Owner of the note.
+ * @param id Note id.
+ * @returns Nothing.
+ */
+async function insertNote(userId: string, id: string): Promise<void> {
+  await ctx.db
+    .prepare(
+      'INSERT INTO notes (id, user_id, text, lat, lng, created_at, updated_at, synced_at) VALUES (?, ?, ?, 0, 0, 0, 0, 0)',
+    )
+    .bind(id, userId, 'note')
+    .run()
+}
+
+describe('purging abandoned accounts', () => {
+  it('removes a credential-less, note-less account idle past the TTL', async () => {
+    const now = Date.now()
+    // No credential and no session: idleness falls back to the creation time.
+    await setUserCreatedAt(USER, now - ABANDONED_ACCOUNT_TTL_MS - 1000)
+
+    await purgeAbandonedAccounts(ctx.env, now)
+
+    expect(await count('users', 'id', USER)).toBe(0)
+  })
+
+  it('keeps a freshly created account that has not aged out', async () => {
+    const now = Date.now()
+    await setUserCreatedAt(USER, now - ABANDONED_ACCOUNT_TTL_MS + 1000)
+
+    await purgeAbandonedAccounts(ctx.env, now)
+
+    expect(await count('users', 'id', USER)).toBe(1)
+  })
+
+  it('spares an old account that still owns a passkey', async () => {
+    const now = Date.now()
+    await setUserCreatedAt(USER, now - ABANDONED_ACCOUNT_TTL_MS - 1000)
+    await insertCredential(USER, 'cred-1')
+
+    await purgeAbandonedAccounts(ctx.env, now)
+
+    expect(await count('users', 'id', USER)).toBe(1)
+  })
+
+  it('spares an old account that still owns a note', async () => {
+    const now = Date.now()
+    await setUserCreatedAt(USER, now - ABANDONED_ACCOUNT_TTL_MS - 1000)
+    await insertNote(USER, 'n1')
+
+    await purgeAbandonedAccounts(ctx.env, now)
+
+    expect(await count('users', 'id', USER)).toBe(1)
+  })
+
+  it('measures idleness from the last login, not the creation date', async () => {
+    const now = Date.now()
+    // Created long ago, but signed in recently: a recent login must keep it.
+    await setUserCreatedAt(USER, now - ABANDONED_ACCOUNT_TTL_MS * 2)
+    await insertSession(USER, 'sess-recent', now - 1000)
+
+    await purgeAbandonedAccounts(ctx.env, now)
+
+    expect(await count('users', 'id', USER)).toBe(1)
+  })
+
+  it('removes an account whose last login is itself past the TTL', async () => {
+    const now = Date.now()
+    await setUserCreatedAt(USER, now - ABANDONED_ACCOUNT_TTL_MS * 2)
+    await insertSession(USER, 'sess-old', now - ABANDONED_ACCOUNT_TTL_MS - 1000)
+
+    await purgeAbandonedAccounts(ctx.env, now)
+
+    // The session tombstone must go with it, leaving nothing keyed on the user.
+    expect(await count('users', 'id', USER)).toBe(0)
+    expect(await count('sessions', 'user_id', USER)).toBe(0)
+  })
+
+  it('leaves accounts in the deletion flow to the deletion purge', async () => {
+    const now = Date.now()
+    // Marked for deletion within its grace window. requestAccountDeletion drops
+    // the passkey, so this is also credential-less and old, but the deletion
+    // flow owns it and its grace window must not be short-circuited here.
+    await setUserCreatedAt(USER, now - ABANDONED_ACCOUNT_TTL_MS - 1000)
+    await requestAccountDeletion(ctx.env, USER, now)
+
+    await purgeAbandonedAccounts(ctx.env, now)
+
+    expect(await count('users', 'id', USER)).toBe(1)
+  })
+
+  it('clears the address-keyed e-mail rows it leaves behind', async () => {
+    const now = Date.now()
+    await setUserCreatedAt(USER, now - ABANDONED_ACCOUNT_TTL_MS - 1000)
+    await issueEmailCode(ctx.env, EMAIL, now)
+    await claimEmailCodeRequest(ctx.env, EMAIL, now)
+
+    await purgeAbandonedAccounts(ctx.env, now)
+
+    expect(await count('users', 'id', USER)).toBe(0)
+    expect(await count('email_codes', 'email', EMAIL)).toBe(0)
+    expect(await count('email_code_rate_limits', 'email', EMAIL)).toBe(0)
+  })
+
+  it('is safe to run when nothing is abandoned', async () => {
+    await insertCredential(USER, 'cred-1')
+
+    await expect(purgeAbandonedAccounts(ctx.env, Date.now())).resolves.toBeUndefined()
+
+    expect(await count('users', 'id', USER)).toBe(1)
+    expect(await count('users', 'id', KEEPER)).toBe(1)
   })
 })
 
