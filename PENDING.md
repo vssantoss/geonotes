@@ -129,6 +129,21 @@ The connection is now live and has deployed to production twice (once broken, on
 
 ## 7. Code follow-ups, not urgent
 
+- [ ] **OPEN BUG: Android PWA got stuck after a remote sign-out. Seen once on 2026-07-20, not yet reproduced. Deliberately left unfixed pending a second sighting.**
+
+  Reproduction as it happened: signed in as `test2@vsantos` on both Android and PC, then revoked the Android device from the PC. Android correctly detected the revoke and showed the "notes removed, safe on your account" notice with the sign-in button. From there:
+  - Tapping sign in never showed a passkey prompt, and the login button stayed disabled with no error.
+  - After restarting the app, the account badge (top right) was gone entirely.
+  - Notes could be composed but Save did nothing.
+  - **Fully closing all apps restored normal behaviour.** Nothing was lost, so this is stuck state, not corruption.
+
+  Two findings from reading the code, one solid and one not:
+
+  1. **Solid, and worth fixing on its own merits.** `src/lib/api.ts` has no timeout and no abort signal at all. `logIn` (`AuthScreen.tsx:82`) sets `busy = true`, then calls `passkeyLogin`, which does a network round trip to `/api/auth/passkey-login-options` (`auth.ts:42`) *before* reaching `startAuthentication`. If that request hangs rather than failing, the promise never settles, the catch never runs, `busy` is never cleared, and the button is dead with no error and no passkey prompt. Exactly the observed symptom. Fix: `AbortSignal.timeout` in `apiFetch` so a stall becomes an ordinary error the existing handler already covers.
+  2. **Unattributed.** The missing badge means `account` stayed `undefined`, not `null`: the gate at `App.tsx:96` is `account !== undefined`, so `undefined` means the `useLiveQuery` never resolved, *not* signed out. That plus Save doing nothing points at a stuck IndexedDB connection, consistent with recovery on full close. The app registers no Dexie `blocked`, `versionchange` or `close` handlers, so it cannot notice or recover from this. Root cause unknown. Leading hypothesis is two contexts on the same origin holding the database (installed PWA plus a Chrome tab on `gnotes.vshub.app`), unconfirmed.
+
+  To diagnose on a repeat: `chrome://inspect` from the PC with the phone on USB, check the console for Dexie errors and whether the `geonotes` database reports as blocked. Note whether a Chrome tab was open alongside the installed PWA.
+
 - [ ] **Fix the three react-hooks findings currently downgraded to warnings.** Tracked in detail in `TODO.md`. `EditorScreen.tsx:60` (writes a ref during render) is the one that actually matters; the two settings sections are the ordinary load-on-mount pattern plus a missing `reload` dependency. Revert the `warn` downgrade in `eslint.config.js` once they are fixed, otherwise it quietly becomes permanent and the next real violation slips through.
 
 - [ ] **TypeScript is pinned to 6.0.3, down from 7.0.2.** typescript-eslint hard-refuses to run on TypeScript 7, so type-aware linting and TS 7 cannot coexist today. Check typescript-eslint's peer range before bumping TypeScript again, or linting silently stops being type-aware.
