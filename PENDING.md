@@ -72,7 +72,13 @@ Routing checks all pass: SPA root 200 html, deep link `/settings/some/deep/path`
 - [ ] **Back up `AUTH_SECRET` to a password manager. `.dev.vars` line 4 is the only copy.**
   The original production value was **unrecoverable**: `~/.bash_history:1804-1806` shows it was generated with `openssl rand -base64 32` and pasted into an interactive `wrangler pages secret put` prompt, so the value was never written to disk. History stores the command, never the output or the stdin.
   A fresh one was generated on 2026-07-19 and set on **both** Pages production and the Worker (piped from `.dev.vars`, so they are byte-identical rather than hand-pasted). It now exists in exactly one place. Losing that file repeats the whole problem.
-  Rotating it invalidated any WebAuthn ceremony in flight at that instant. Sessions were untouched. Pre-launch with no users, so the real blast radius was nil.
+  **What the rotation actually broke: almost nothing, and less than I told you at the time.** I said passkeys created under the old secret would stop working. That was wrong, and it is worth knowing why, because it changes how scared to be of this secret in future.
+
+  `AUTH_SECRET` has exactly two call sites, both in `worker/_lib/enroll.ts`: signing and verifying the **enroll token**, a 10-minute stateless proof that an address was just verified by e-mail code. It gates attaching a passkey to an address and changing an account's e-mail. That is its entire blast radius. Rotating it means anyone holding an enroll token minted before the change gets `401 bad enroll token` and has to request a new code.
+
+  It does **not** touch: enrolled passkeys (the credential is a public key in D1, verified against the authenticator's signature, secret not an input), WebAuthn challenges (`challenge.ts` stores them as D1 rows under a random id and deletes-on-read, so they are server state and not signed at all), or sessions (opaque D1 tokens).
+
+  Confirmed on production 2026-07-20: passkeys created under the **old** secret on the Pages deployment log in fine against the Worker under the new one, with saved data loading correctly. Where my error came from: R3 in the migration plan said the secret "HMAC-signs challenge tokens in `challenge.ts`". True of an older design, stale since challenges moved to D1. I repeated it without rereading the file. R3 and the `enroll.ts` header comment are now both corrected.
 
 - [ ] **Note that local dev now runs with the production `AUTH_SECRET`,** since it is the same value in `.dev.vars`. Acceptable here, worth remembering.
 
@@ -113,7 +119,11 @@ The connection is now live and has deployed to production twice (once broken, on
 - [ ] An existing session is still signed in after the cutover.
 - [ ] Sync, session revoke, and account-deletion request all still work on production.
 - [ ] Watch `wrangler tail` for 500s during the above.
-- [ ] **The Turnstile widget actually renders on the sign-in screen.** This is the check that closes out section 1. No remote probe can do it: `curl` cannot produce a Turnstile token, so it always sees `403 turnstile required` whether the widget works or not. Only a real browser settles it.
+- [x] ~~**The Turnstile widget actually renders on the sign-in screen.**~~ **DONE 2026-07-20, working.** This closes out section 1. Worth keeping the note on why it needed a human: `curl` cannot produce a Turnstile token, so it always sees `403 turnstile required` whether the widget works or not. Only a real browser settles it.
+
+- [x] ~~E-mail sign-in end to end.~~ **DONE 2026-07-20, working.**
+
+- [x] ~~Passkey register and login on production.~~ **DONE 2026-07-20, working**, including passkeys enrolled under the *old* `AUTH_SECRET` on Pages. See section 3 for why that is expected rather than surprising.
 
 ---
 

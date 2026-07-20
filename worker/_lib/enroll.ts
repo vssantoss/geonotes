@@ -5,8 +5,16 @@ import type { Env } from './env'
 // Stateless proof-of-e-mail-ownership tokens. Verifying an e-mail code mints
 // one of these; the passkey-registration endpoints require it before enrolling
 // a credential, so nobody can attach a passkey to an address they do not own.
-// Like the WebAuthn challenge tokens, they are HMAC-signed and carry no server
-// state, costing zero database transactions.
+// They are HMAC-signed and carry no server state, costing zero database
+// transactions. WebAuthn challenge tokens used to work the same way but no
+// longer do: they are D1 rows now (see challenge.ts), because a challenge must
+// be single-use and a stateless token cannot be revoked once issued. Enroll
+// tokens keep the stateless form deliberately, accepting reuse within their
+// 10-minute window in exchange for costing nothing.
+//
+// This is the only consumer of AUTH_SECRET. Rotating that secret invalidates
+// enroll tokens already in flight and nothing else: stored credentials are
+// public keys in D1, and sessions are opaque D1 tokens.
 
 /** An enroll token is valid for 10 minutes: enough to complete a passkey ceremony. */
 const ENROLL_TTL_MS = 10 * 60 * 1000
