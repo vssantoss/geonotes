@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { MapPin } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { db, KV } from './lib/db'
+import { clearDraft, readDraft } from './lib/draft'
 import { hasUnsyncedNotes, signOut } from './lib/auth'
 import { syncNow } from './lib/sync'
 import { useGeolocation } from './hooks/useGeolocation'
@@ -29,7 +30,13 @@ export default function App() {
   const t = useT()
   const online = useOnline()
   const sync = useSyncStatus()
-  const [editing, setEditing] = useState<EditorTarget | null>(null)
+  // Restored synchronously so a note left unsaved when the webview or tab was
+  // discarded reopens in the editor, at the fix it was written at, with no
+  // flash of the main screen in between.
+  const [editing, setEditing] = useState<EditorTarget | null>(() => {
+    const draft = readDraft()
+    return draft === null ? null : { kind: 'draft', location: draft.location, text: draft.text }
+  })
   const [showAuth, setShowAuth] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   // The nearby/all filter lives here (not in MainScreen) so it survives opening
@@ -50,6 +57,16 @@ export default function App() {
   // would be indistinguishable from the loading sentinel.
   const account = useLiveQuery(async () => (await db.kv.get(KV.userEmail)) ?? null, [], undefined)
   const signedIn = account !== undefined && account !== null
+
+  /**
+   * Leaves the editor. The note has been saved, deleted or abandoned by this
+   * point, so the crash-recovery draft is no longer wanted and must go, or the
+   * next launch would reopen the editor on it.
+   */
+  const closeEditor = () => {
+    clearDraft()
+    setEditing(null)
+  }
 
   /**
    * Begins sign-out. With no notes on the device there is nothing to keep, so
@@ -129,7 +146,7 @@ export default function App() {
       )}
 
       {editing ? (
-        <EditorScreen target={editing} geo={geo} onDone={() => setEditing(null)} />
+        <EditorScreen target={editing} geo={geo} onDone={closeEditor} />
       ) : (
         <MainScreen
           geo={geo}

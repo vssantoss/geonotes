@@ -28,7 +28,7 @@ Routing checks all pass: SPA root 200 html, deep link `/settings/some/deep/path`
 | Rate limiter | `AUTH_RATE_LIMITER`, 20 requests / 60s, **live for the first time ever** |
 | Cron | `17 4 * * *` (04:17 UTC), registered, **has not fired yet** as of writing |
 | Worker secrets | `AUTH_SECRET`, `RESEND_API_KEY`, `TURNSTILE_SECRET`, all three set and verified |
-| Pages project | `geonotes` still exists, now only `geonotes-49a.pages.dev`, Git Provider `No` |
+| Pages project | **deleted** 2026-07-21. `geonotes-49a.pages.dev` is gone; the Worker is the only path to production |
 | Workers Builds | connected to `vssantoss/geonotes`, production branch `main`, **now building and deploying on push** |
 
 **Deploys now happen on push to `main`.** Workers Builds runs `pnpm run build` then `npx wrangler deploy`. This is no longer a repo where pushing is a safe, inert act: a push to `main` is a production deploy. The active version at the time of writing is `d80de318`, deployed by a build.
@@ -56,14 +56,14 @@ Routing checks all pass: SPA root 200 html, deep link `/settings/some/deep/path`
 
 ## 2. Warnings to be aware of, no action required yet
 
-- [ ] **Rollback is no longer instant.** The migration plan assumed a Worker *Route* sitting in front of a Pages project that still held the hostname, so reverting was "delete the route", effective in seconds. What exists instead is a **Custom Domain** on the Worker, and `gnotes.vshub.app` has been detached from Pages entirely. Reverting now means deleting the Worker custom domain and re-attaching it to Pages, which involves certificate re-provisioning and a real outage window. This is the correct end state and not a mistake to undo, but do not go looking for an instant revert that no longer exists. It raises the stakes on the two tests in section 1.
+- [ ] **There is no rollback to Pages at all.** The migration plan assumed a Worker *Route* sitting in front of a Pages project that still held the hostname, so reverting was "delete the route", effective in seconds. What exists instead is a **Custom Domain** on the Worker, and the Pages project was deleted on 2026-07-21, so there is nothing left to revert *to*. This is the correct end state and not a mistake to undo, but do not go looking for an instant revert that no longer exists. Recovery from a bad deploy now means rolling the Worker back to a previous version (Workers Builds keeps them, and `wrangler rollback` targets one), not switching platforms. It raises the stakes on the two tests in section 1.
 
 - [ ] **The cron fires at 04:17 UTC and does something irreversible.** `purgeExpiredDeletedAccounts` permanently deletes any account past its 30-day deletion window, across 6 tables. It is idempotent and correct, and this is the whole point of the migration, but it is the first time it has ever run on a guaranteed schedule rather than opportunistically. Watch the first run with `wrangler tail`. A clean no-op is the expected result.
 
 - [ ] **The rate limiter is enforcing for the first time.** `worker/_lib/rate-limit.ts` was written against a binding Pages could not provide, so its `if (!env.AUTH_RATE_LIMITER) return` guard short-circuited every call for the entire Pages era. That guard now stops firing and 20 requests / 60s is actually enforced on auth routes. Untested in production by definition. If auth starts 429ing unexpectedly, this is why.
   Note it is per-colo and eventually consistent, so an attacker spread across colos gets `limit x colos`. It is a cheap inner layer that fails fast before D1, **not** a replacement for the zone WAF rule. Do not delete the WAF rule as now-redundant.
 
-- [ ] **`geonotes-49a.pages.dev` still reaches production D1.** The Pages deployment is still live and bound to the same database. Same code, same rows, so not a correctness problem, but it is a second public path to your real data, not a sandbox.
+- [x] ~~**`geonotes-49a.pages.dev` still reaches production D1.**~~ **RESOLVED 2026-07-21 by deleting the Pages project.** That deployment was bound to the same database, so it was a second public path to real data. The Worker is now the only one. Note the branch-preview hazard in section 4 is the same shape and is still open.
 
 ---
 
@@ -144,11 +144,11 @@ The connection is now live and has deployed to production twice (once broken, on
 
   To diagnose on a repeat: `chrome://inspect` from the PC with the phone on USB, check the console for Dexie errors and whether the `geonotes` database reports as blocked. Note whether a Chrome tab was open alongside the installed PWA.
 
-- [ ] **Fix the three react-hooks findings currently downgraded to warnings.** Tracked in detail in `TODO.md`. `EditorScreen.tsx:60` (writes a ref during render) is the one that actually matters; the two settings sections are the ordinary load-on-mount pattern plus a missing `reload` dependency. Revert the `warn` downgrade in `eslint.config.js` once they are fixed, otherwise it quietly becomes permanent and the next real violation slips through.
+- [ ] **Fix the two remaining react-hooks findings currently downgraded to warnings.** Tracked in detail in `TODO.md`. The `EditorScreen.tsx` one (wrote a ref during render) went away on 2026-07-21: the ref existed only to feed the focus handler that bounced an untouched new note back to the main screen, and that handler was deleted when drafts replaced it. The two that remain are both settings sections, the ordinary load-on-mount pattern plus a missing `reload` dependency. Revert the `warn` downgrade in `eslint.config.js` once they are fixed, otherwise it quietly becomes permanent and the next real violation slips through.
 
 - [ ] **TypeScript is pinned to 6.0.3, down from 7.0.2.** typescript-eslint hard-refuses to run on TypeScript 7, so type-aware linting and TS 7 cannot coexist today. Check typescript-eslint's peer range before bumping TypeScript again, or linting silently stops being type-aware.
 
-- [ ] **Retire the Pages project** once the soak looks good: delete `geonotes`. This closes the parallel path to production D1 in section 2.
+- [x] ~~**Retire the Pages project** once the soak looks good: delete `geonotes`.~~ **DONE 2026-07-21.** The parallel path to production D1 in section 2 is closed.
 
 - [ ] **Client-side sync engine tests** for `src/lib/sync.ts` (312 lines) were scoped and not written. The valuable one is the outbox `owner` hash invariant that prevents uploading a previous account's unsynced notes after an account switch. Needs `fake-indexeddb` for Dexie.
 
@@ -165,6 +165,7 @@ pnpm exec wrangler tail          # live logs, incl. the cron run
 pnpm exec wrangler secret list   # worker secrets
 pnpm run lint && pnpm run typecheck && pnpm run build && pnpm test
 
-# confirm who is serving production (Worker gives 404 text/plain, Pages gives 200 html)
+# sanity-check the Worker is serving the API (404 text/plain; a 200 text/html
+# means the request never entered the Worker and fell through to the SPA)
 curl -s -o /dev/null -w "%{http_code} %{content_type}\n" https://gnotes.vshub.app/api/nope
 ```
