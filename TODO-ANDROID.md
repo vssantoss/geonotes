@@ -85,16 +85,49 @@ The strategy: run a single adb server on the Windows host that owns both the emu
 
 Detailed rationale for the auth items is in the "Android app (Capacitor)" section moved to the bottom of this file. Do not weaken the web CSRF/cookie protections to make native work; add a separate native-aware path.
 
-- [ ] Service worker: disable the Workbox SW in the Capacitor build (a SW controlling `capacitor://localhost` fights the native webview) and confirm Dexie/outbox offline still works
+### Confirmed failure mode (measured in the emulator WebView over CDP, 2026-07-20)
+
+Drove real `fetch` calls inside the running app's WebView. The WebView origin is **`https://localhost`** (Android Capacitor default scheme; iOS uses `capacitor://localhost`). Three distinct problems, in the order they bite:
+
+- **A. Requests never leave the device.** `src/lib/api.ts` has `API_BASE = import.meta.env.VITE_API_URL ?? ''`, which is empty, so `fetch('/api/...')` resolves to `https://localhost/api/...`. Capacitor's local static server has no such route and **SPA-fallbacks to `index.html`**: the probe got `status 200`, `content-type: text/html`, body `<!doctype html>...`. Not a 404 or network error, a 200 with HTML, so the client's `res.json()` throws a parse error (swallowed for geocode, a generic failure for auth). This blocks everything today.
+- **B. Production is behind a CORS wall.** A direct `fetch('https://gnotes.vshub.app/api/...')` from the WebView throws `TypeError: Failed to fetch`. Confirmed CORS, not connectivity: a `mode:'no-cors'` fetch returns `type:'opaque'` (reachable), the browser just blocks the readable response because the Worker sends no `Access-Control-Allow-Origin` for `https://localhost`.
+- **C. Auth transport (certain from code, not yet reached because A blocks first).** `credentials:'same-origin'` will not attach the `__Host-geonotes_session` cookie cross-origin, and the Worker's `requireTrustedOrigin` + `SameSite=Strict` + `__Host-` prefix are web-origin-only.
+
+### Fix A: point the native build at the real API
+
+- [ ] Give the Capacitor build an absolute API base: `VITE_API_URL=https://gnotes.vshub.app` (native build only; the web build must stay empty so cookies remain same-origin)
+- [ ] Service worker: disable the Workbox SW in the Capacitor build (it is part of why `https://localhost` answers at all) and confirm Dexie/outbox offline still works
+- [ ] Rebuild + `cap sync`, verify in the WebView that `/api/*` now targets `gnotes.vshub.app` (expect it to fail next on CORS, that is progress)
+
+### Fix B: allow the native origin at the edge (CORS)
+
+- [ ] Worker: add CORS for the Capacitor origins (`https://localhost` on Android, `capacitor://localhost` on iOS) on `/api/*`, including preflight (`OPTIONS`) and credentialed-request handling, without loosening `SameSite`, the `__Host-` prefix, or `requireTrustedOrigin` for the web flow
+- [ ] Verify every `/api/*` call reaches the Worker and returns JSON from the WebView
+
+### Fix C: native-aware auth transport (cookie -> bearer token)
+
 - [ ] Add a secure-storage plugin and keep the session token in Android Keystore / EncryptedSharedPreferences
-- [ ] Refactor auth transport: stop relying on the `__Host-geonotes_session` cookie; send the session token explicitly (Authorization header)
-- [ ] Worker: add a native-aware, CSRF-safe auth path separate from the browser cookie flow (accept the header token)
-- [ ] Worker: allow the Capacitor origin for `/api/*` (CORS) without loosening `SameSite`, the `__Host-` prefix, or `requireTrustedOrigin` for the web flow
-- [ ] Verify every `/api/*` call works cross-origin from `capacitor://localhost`
+- [ ] Refactor `apiFetch`: stop relying on the `__Host-geonotes_session` cookie; send the session token explicitly (Authorization header) when running native
+- [ ] Worker: add a native-aware, CSRF-safe auth path separate from the browser cookie flow (accept and validate the header token)
+- [ ] Verify login + session + sync work end to end from the WebView
+
+### Native passkeys
+
 - [ ] Add a native passkey plugin driving Android Credential Manager
 - [ ] Serve `/.well-known/assetlinks.json` from the Worker with the app signing cert SHA-256 fingerprint (Digital Asset Links for `RP_ID` = `gnotes.vshub.app`)
 - [ ] Wire the native passkey assertion back into the existing `@simplewebauthn/server` verification
-- [ ] Native bot resistance: add Play Integrity on the pre-auth endpoints (see the moved notes) so native supplies a proof-of-humanity token alongside web Turnstile
+
+### Hardening + polish
+
+- [ ] Native bot resistance (full rationale in the "Native bot resistance" part of the moved section below):
+  - [ ] Do NOT render or force Turnstile in the native webview: its origin is `localhost`, which weakens the siteverify hostname signal and is finicky around Origin/Referer. Use platform attestation instead.
+  - [ ] Android: obtain a Play Integrity token in the app and send it with pre-auth requests; verify server-side against Google's Play Integrity API (app package, signing cert, integrity verdicts). Needs a Google Play project + a service credential.
+  - [ ] Backend: pre-auth endpoints (`email-request` first) accept EITHER a Turnstile token (web) OR a valid attestation token (native), and reject requests carrying neither. Keep the per-IP edge rate limit as the floor under both.
+  - [ ] Do NOT add a "skip if native" bypass: a client-asserted native flag is trivially forgeable and reopens the abuse hole.
+  - [ ] iOS (later): App Attest (hardware-bound key, assert per request), with DeviceCheck as the lighter-weight fallback.
+
+  Reality check (verified 2026-07-20): Turnstile is ALREADY required on `email-request` in production, so this is a functional BLOCKER, not just future hardening. `worker/api/auth/email-request.ts:39` calls `verifyTurnstile`, which throws `403 "turnstile required"` whenever `TURNSTILE_SECRET` is set (`worker/_lib/turnstile.ts:36-40`), and it is set in production. Consequence: once the native app can reach the API (Fix A/B/C), its email sign-in / account-creation flow will 403 until the backend accepts a Play Integrity token as the native alternative on `email-request`. Passkey *login* does not call Turnstile (`passkey-login-options` / `passkey-login`), so a returning passkey user is unaffected; only email-code issuance (new account, email change) is gated. This is why bot resistance cannot simply be deferred to the end for anything involving account creation.
+- [ ] Fix the app icon: the `android/` project still ships Capacitor's default launcher icon. Generate proper adaptive launcher icons (and the splash) from the GeoNotes brand assets (`public/maskable-icon-512x512.png` / `public/pwa-512x512.png` / `public/favicon.svg`), e.g. via `@capacitor/assets generate --android`. Check the red rounded-square mark and adaptive-icon safe zone on a device.
 - [ ] Polish: splash screen, status bar, hardware back button, safe-area insets
 - [ ] Re-test the full auth + sync + passkey flow on a device
 
