@@ -42,8 +42,9 @@ export default defineConfig({
     }),
   ],
   server: {
-    // Forward API calls to `wrangler pages dev` during development so
-    // `pnpm dev` (fast HMR) and the Functions backend can run side by side.
+    // Forward API calls to the `wrangler dev` server (`pnpm preview`, port
+    // 8788) during development so `pnpm dev` (fast HMR) and the Worker backend
+    // can run side by side.
     proxy: {
       '/api': 'http://localhost:8788',
     },

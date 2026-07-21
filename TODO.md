@@ -1,8 +1,10 @@
 # TODO
 
-## Pages -> Workers cutover (manual steps, in order)
+## Pages -> Workers cutover (COMPLETE, kept as a record)
 
-The code is done and tested on branch `eslint-setup` (which stacks on `worker-integration-tests` -> `workers-migration`). Nothing below is merged to `main` yet. Every step is reversible; the Pages project stays deployed and serving production until step 11.
+**Finished 2026-07-21, when the `geonotes` Pages project was deleted.** Production is `geonotes-worker` on a Custom Domain, and pushing to `main` builds and deploys it. Nothing below is still to do, and the reversibility this list promised no longer exists: there is no Pages project to fall back to. Kept because the inline findings explain why the current setup is shaped the way it is. Live status lives in `PENDING.md`.
+
+The steps were written when the code sat on branch `eslint-setup` (stacked on `worker-integration-tests` -> `workers-migration`), before any of it reached `main`.
 
 Steps are marked DONE as they are completed, with what was found or decided recorded inline.
 
@@ -34,7 +36,9 @@ Every `wrangler` command below needs the API token first: `set -a; . ~/dev/.clou
 10. **Soak for a few days**, watching `wrangler tail` and D1 usage.
 11. **Retire Pages.** As a separate, low-stakes change: swap the Route for a proper Custom Domain (this is the step that needs the Pages detach), then delete the `geonotes` Pages project.
 
-Notes while both are live: the `geonotes-49a.pages.dev` deployment still reaches production D1, so it is a parallel path to the same data, not a sandbox. And do not bundle any frontend change into the cutover deploy: an unmodified frontend produces byte-identical hashed filenames, which keeps every installed service worker's precache valid across the switch.
+    **DONE.** The Custom Domain was attached on 2026-07-19 (steps 7 and 11 collapsed into one: production went straight to a Custom Domain rather than a Route, so the Route stage never existed). The Pages project was deleted on 2026-07-21, which closed the `geonotes-49a.pages.dev` path to production D1.
+
+A note from the cutover, still worth keeping: do not bundle a frontend change into a deploy that moves serving infrastructure. An unmodified frontend produces byte-identical hashed filenames, which keeps every installed service worker's precache valid across the switch.
 
 ---
 
@@ -60,7 +64,7 @@ Notes while both are live: the `geonotes-49a.pages.dev` deployment still reaches
 
 ## Security & abuse hardening
 
-Context for this whole section: because the app runs on Cloudflare Pages there is no fail2ban and no server to ban IPs on. That is fine. Cloudflare absorbs classic volumetric DDoS for us:
+Context for this whole section: the app runs at the edge (on Cloudflare Pages when this was written, on Workers since 2026-07-19), so there is no fail2ban and no server to ban IPs on. That is fine. Cloudflare absorbs classic volumetric DDoS for us:
 
 - **L3/L4 (network/transport) DDoS**: mitigated automatically and unmetered on every plan, including free. Nothing to configure.
 - **L7 (HTTP) DDoS**: automatic managed rulesets run on all plans (sensitivity is fixed and non-tunable on free). Bot Fight Mode is available on free as a toggle.
@@ -90,7 +94,9 @@ For reference, the pre-auth D1 touches an attacker can lever (this list drives t
 - `passkey-login-options` / `passkey-login`: credential/challenge lookups.
 - sync push/pull: authenticated, but the most expensive per-request D1 work, so it matters once a session exists.
 
-### Migrate Cloudflare Pages -> Workers
+### Migrate Cloudflare Pages -> Workers (DONE 2026-07-19)
+
+Kept for the reasoning, which still explains why the rate limiter and the cron are shaped as they are. Note `functions/` below is now `worker/`.
 
 The structural answer to D1 abuse, and to the two scheduled-job gaps in the Features list at the top of this file. Cloudflare now recommends Workers (with static assets) over Pages for new work, and Workers exposes two primitives Pages structurally cannot:
 

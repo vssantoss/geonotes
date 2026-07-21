@@ -8,10 +8,12 @@
 #   local:  pnpm wrangler d1 migrations apply geonotes --local
 #   remote: pnpm wrangler d1 migrations apply geonotes --remote
 
-# Deliberately not "geonotes": that name belongs to the Pages project this
-# replaced, which stays deployed and reachable during the cutover so rolling
-# back is just deleting the Worker route. Only affects the workers.dev
-# subdomain; production traffic arrives via the custom hostname.
+# Named "geonotes-worker" because "geonotes" belonged to the Pages project this
+# replaced, which had to stay deployed alongside it during the cutover. That
+# project was deleted on 2026-07-21, so the name is free now, but renaming a
+# Worker creates a new one rather than renaming in place: it would drop the
+# custom domain, the secrets and the deploy history. Not worth it. Note
+# "geonotes" is still the D1 database name above, and is unaffected.
 name = "geonotes-worker"
 main = "worker/index.ts"
 compatibility_date = "2026-07-01"
