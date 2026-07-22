@@ -21,6 +21,16 @@ export type Env = {
   RP_ID: string
   /** Full origin the app is served from, for WebAuthn verification. */
   ORIGIN: string
+  /**
+   * The Android Credential Manager assertion origin, of the form
+   * `android:apk-key-hash:<base64url(SHA-256(signing cert DER))>`. Unlike the web
+   * ceremony, a native passkey assertion carries this instead of an https origin,
+   * so WebAuthn verification must accept it alongside ORIGIN. It is derived from
+   * whichever cert signs the installed APK (debug vs Play App Signing differ), so
+   * it lives in config rather than being hardcoded. Absent off Android builds and
+   * in tests, where only the web origin is expected.
+   */
+  ANDROID_PASSKEY_ORIGIN?: string
   /** Secret for HMAC-signing enroll tokens (set via `wrangler secret put AUTH_SECRET`). */
   AUTH_SECRET: string
   /**

@@ -4,7 +4,7 @@ import type { AuthenticationResponseJSON } from '@simplewebauthn/server'
 import { json, HttpError, route } from '../../_lib/http'
 import { createSession } from '../../_lib/session'
 import { isNativeOrigin } from '../../_lib/cors'
-import { consumeChallenge, PASSKEY_LOGIN_SUBJECT } from '../../_lib/challenge'
+import { consumeChallenge, expectedOrigins, PASSKEY_LOGIN_SUBJECT } from '../../_lib/challenge'
 import { parseTransports } from './passkey-register-options'
 import type { Env } from '../../_lib/env'
 
@@ -44,7 +44,7 @@ export const onRequestPost = route<Env>(async ({ env, request }) => {
   const verification = await verifyAuthenticationResponse({
     response: body.response,
     expectedChallenge,
-    expectedOrigin: env.ORIGIN,
+    expectedOrigin: expectedOrigins(env),
     expectedRPID: env.RP_ID,
     credential: {
       id: cred.id,

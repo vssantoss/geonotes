@@ -4,7 +4,7 @@ import type { RegistrationResponseJSON } from '@simplewebauthn/server'
 import { json, HttpError, route } from '../../_lib/http'
 import { createSession } from '../../_lib/session'
 import { isNativeOrigin } from '../../_lib/cors'
-import { consumeChallenge } from '../../_lib/challenge'
+import { consumeChallenge, expectedOrigins } from '../../_lib/challenge'
 import { getEmailSender } from '../../_lib/email'
 import { normalizeEmail } from './email-request'
 import type { Env } from '../../_lib/env'
@@ -55,7 +55,7 @@ export const onRequestPost = route<Env>(async ({ env, request, waitUntil }) => {
   const verification = await verifyRegistrationResponse({
     response: body.response,
     expectedChallenge,
-    expectedOrigin: env.ORIGIN,
+    expectedOrigin: expectedOrigins(env),
     expectedRPID: env.RP_ID,
   })
   if (!verification.verified || !verification.registrationInfo) {

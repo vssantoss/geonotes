@@ -12,6 +12,21 @@ import type { Env } from './env'
 /** Challenges are valid for 5 minutes, enough for one ceremony. */
 const CHALLENGE_TTL_MS = 5 * 60 * 1000
 
+/**
+ * The origins a WebAuthn assertion is allowed to come from. The web ceremony
+ * carries env.ORIGIN; a native Android assertion (Credential Manager) carries
+ * env.ANDROID_PASSKEY_ORIGIN (`android:apk-key-hash:...`) instead, so both must
+ * be accepted. simplewebauthn takes a list and matches the assertion against
+ * any member, so this stays a strict allowlist, not a relaxed check. The RP id
+ * is unchanged either way (still env.RP_ID): only the origin differs on native.
+ *
+ * @param env - worker environment (uses ORIGIN and optional ANDROID_PASSKEY_ORIGIN).
+ * @returns the allowed origins, web-only when no Android origin is configured.
+ */
+export function expectedOrigins(env: Env): string[] {
+  return env.ANDROID_PASSKEY_ORIGIN ? [env.ORIGIN, env.ANDROID_PASSKEY_ORIGIN] : [env.ORIGIN]
+}
+
 /** Fixed challenge subject for usernameless passkey login: the user is
     identified from the discoverable credential they present, not from a
     subject known up front, so the challenge is bound to this constant instead. */
