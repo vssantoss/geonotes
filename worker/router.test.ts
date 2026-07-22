@@ -140,3 +140,90 @@ describe('router', () => {
     expect(await res.json()).toEqual({ sent: true })
   })
 })
+
+// The native (Capacitor) webview loads from https://localhost (Android) or
+// capacitor://localhost (iOS), so its calls to the API are cross-origin and the
+// browser needs CORS headers to let it read the response. The web app is
+// same-origin and must stay unaffected.
+const ANDROID_ORIGIN = 'https://localhost'
+const IOS_ORIGIN = 'capacitor://localhost'
+
+describe('CORS for native origins', () => {
+  it('answers a preflight from the Android origin with the allowed origin and methods', async () => {
+    const res = await app.request(
+      '/api/sync',
+      { method: 'OPTIONS', headers: { Origin: ANDROID_ORIGIN } },
+      fakeEnv(fakeDb().db),
+    )
+    expect(res.status).toBe(204)
+    expect(res.headers.get('access-control-allow-origin')).toBe(ANDROID_ORIGIN)
+    expect(res.headers.get('access-control-allow-methods')).toContain('POST')
+    expect(res.headers.get('access-control-allow-headers')).toContain('Authorization')
+    expect(res.headers.get('access-control-max-age')).toBe('86400')
+  })
+
+  it('answers a preflight from the iOS origin by reflecting that exact origin', async () => {
+    const res = await app.request(
+      '/api/sync',
+      { method: 'OPTIONS', headers: { Origin: IOS_ORIGIN } },
+      fakeEnv(fakeDb().db),
+    )
+    expect(res.status).toBe(204)
+    expect(res.headers.get('access-control-allow-origin')).toBe(IOS_ORIGIN)
+  })
+
+  it('does not grant CORS to a preflight from an untrusted origin', async () => {
+    const res = await app.request(
+      '/api/sync',
+      { method: 'OPTIONS', headers: { Origin: 'https://evil.example' } },
+      fakeEnv(fakeDb().db),
+    )
+    // Still a 204, but with no allow-origin header the browser blocks the request.
+    expect(res.headers.get('access-control-allow-origin')).toBeNull()
+  })
+
+  it('reflects the origin onto a normal response so the WebView can read it', async () => {
+    const res = await app.request(
+      '/api/geocode?lat=999&lng=0',
+      { headers: { Origin: ANDROID_ORIGIN } },
+      fakeEnv(fakeDb().db),
+    )
+    // The route still runs and rejects the coordinates; CORS only adds headers.
+    expect(res.status).toBe(400)
+    expect(res.headers.get('access-control-allow-origin')).toBe(ANDROID_ORIGIN)
+    expect(res.headers.get('vary')).toBe('Origin')
+  })
+
+  it('keeps the origin/CSRF rejection readable to the native client', async () => {
+    // A native POST still fails requireTrustedOrigin (that is Fix C's job), but
+    // the 403 must carry CORS headers or it surfaces as an opaque fetch failure.
+    const res = await app.request(
+      '/api/sync',
+      { method: 'POST', headers: { Origin: ANDROID_ORIGIN } },
+      fakeEnv(fakeDb().db),
+    )
+    expect(res.status).toBe(403)
+    expect(res.headers.get('access-control-allow-origin')).toBe(ANDROID_ORIGIN)
+  })
+
+  it('never allows credentialed (cookie) cross-origin sharing', async () => {
+    // No Allow-Credentials header: native auth is a bearer token, not the cookie,
+    // so the web cookie's SameSite/__Host- protections are never relaxed.
+    const res = await app.request(
+      '/api/geocode?lat=999&lng=0',
+      { headers: { Origin: ANDROID_ORIGIN } },
+      fakeEnv(fakeDb().db),
+    )
+    expect(res.headers.get('access-control-allow-credentials')).toBeNull()
+  })
+
+  it('leaves same-origin web responses untouched', async () => {
+    const res = await app.request(
+      '/api/geocode?lat=999&lng=0',
+      { headers: { Origin: ORIGIN } },
+      fakeEnv(fakeDb().db),
+    )
+    expect(res.headers.get('access-control-allow-origin')).toBeNull()
+    expect(res.headers.get('vary')).toBeNull()
+  })
+})

@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { cors } from './_lib/cors'
 import { error } from './_lib/http'
 import { serveSite } from './site'
 import type { Env } from './_lib/env'
@@ -33,6 +34,12 @@ import { onRequestPost as sessionsRevokeOthers } from './api/auth/sessions/revok
  * import, which is why the route bodies themselves needed no changes.
  */
 export const app = new Hono<{ Bindings: Env }>()
+
+// Grant the native (Capacitor) webview origins CORS on /api/*, and answer their
+// preflight, before any route or the origin check runs. Registered first so it
+// wraps every /api handler and the OPTIONS preflight never falls through to the
+// 404 catch-all. Web requests are same-origin and pass through untouched.
+app.use('/api/*', cors)
 
 app.get('/api/geocode', geocode)
 app.post('/api/sync', sync)
