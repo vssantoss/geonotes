@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.get_login_creds"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "app.vshub.gnotes",
+      "sha256_cert_fingerprints": [
+        "FE:17:21:5C:5D:D8:1B:32:5E:70:ED:0A:5A:B5:73:01:35:97:B0:B4:1A:97:E7:DE:16:00:A0:37:9E:8F:3E:98"
+      ]
+    }
+  }
+]
