@@ -1,5 +1,9 @@
-// Empty in browser builds so cookies stay same-origin. A future native build
-// must replace this transport with platform secure storage and native requests.
+// Empty in web builds so requests stay same-origin and the session cookie is
+// attached. The native (Capacitor) build sets VITE_API_URL to the deployed
+// origin (see `build:native`) because its webview runs from `https://localhost`
+// and must reach the API cross-origin. Cross-origin means the cookie will not
+// ride along, so the native build still needs the bearer-token transport
+// (Phase 2 Fix C); this constant only fixes where the request is sent.
 const API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? ''
 
 /** Error thrown for non-2xx API responses, carrying the HTTP status. */

@@ -3,6 +3,15 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
+// A native (Capacitor) build ships the bundle inside the app and loads it from
+// the `https://localhost` webview origin, so it must talk to the deployed API
+// cross-origin (VITE_API_URL, set by the `build:native` script) and must NOT
+// register a service worker: the app shell is already on-device as native
+// files, so the SW adds no offline value and only risks serving stale assets
+// across app updates. The default web build keeps both (same-origin API +
+// installable PWA). One flag drives both differences.
+const isNativeBuild = process.env.CAPACITOR_BUILD === '1'
+
 export default defineConfig({
   resolve: {
     // "@/..." import alias used by shadcn/ui components (mirrors tsconfig paths).
@@ -14,6 +23,10 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
+      // Disabled for the native build (see isNativeBuild above). The plugin
+      // stays in the list so `virtual:pwa-register` still resolves and
+      // `registerSW()` in main.tsx compiles to a no-op instead of failing.
+      disable: isNativeBuild,
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'apple-touch-icon-180x180.png'],
       manifest: {

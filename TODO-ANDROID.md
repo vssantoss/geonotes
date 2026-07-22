@@ -95,9 +95,16 @@ Drove real `fetch` calls inside the running app's WebView. The WebView origin is
 
 ### Fix A: point the native build at the real API
 
-- [ ] Give the Capacitor build an absolute API base: `VITE_API_URL=https://gnotes.vshub.app` (native build only; the web build must stay empty so cookies remain same-origin)
-- [ ] Service worker: disable the Workbox SW in the Capacitor build (it is part of why `https://localhost` answers at all) and confirm Dexie/outbox offline still works
-- [ ] Rebuild + `cap sync`, verify in the WebView that `/api/*` now targets `gnotes.vshub.app` (expect it to fail next on CORS, that is progress)
+One build-time flag, `CAPACITOR_BUILD=1`, drives both differences; the new `pnpm build:native` script sets it (plus `VITE_API_URL`) and runs `cap sync android`. The default `pnpm build` (web) is unchanged.
+
+- [x] Give the Capacitor build an absolute API base: `VITE_API_URL=https://gnotes.vshub.app` (native build only; the web build stays empty so cookies remain same-origin). Verified: `gnotes.vshub.app` is baked into the native bundle and absent from the web bundle. No source change to `api.ts` (it already reads `import.meta.env.VITE_API_URL`); only its comment was updated.
+- [x] Service worker: disable the Workbox SW in the Capacitor build via `VitePWA({ disable: isNativeBuild })` in `vite.config.ts` (plugin stays in the list so `virtual:pwa-register` resolves and `registerSW()` compiles to a no-op). Verified: native `dist/` emits no `sw.js`/`workbox-*.js`; web `dist/` still does.
+  - [ ] Runtime check (needs the emulator): confirm the Dexie/outbox offline path still works with the SW gone. (Deferred: exercised once login works; no regression expected since the outbox is IndexedDB, not the SW cache.)
+- [x] Rebuilt + `cap sync` + reinstalled the APK, verified in the emulator WebView over CDP. Clean-install result (2026-07-21): `origin` is `https://localhost`, `navigator.serviceWorker` has **0** registrations (SW disable confirmed at runtime), the app's absolute call to `https://gnotes.vshub.app/api/*` now throws `TypeError: Failed to fetch` (CORS), and a `mode:'no-cors'` probe returns `type:'opaque'` (production reached, CORS is the sole remaining wall). The old 200-HTML SPA-fallback dead end is gone. **Fix A is done; the failure has moved to CORS (Fix B).**
+
+Dev-only gotcha found while verifying: reinstalling the native APK *over* a prior SW-bearing build (the Phase 1 web build) leaves the old `https://localhost/sw.js` service worker registered, because the native build serves no `/sw.js` so its update check 404s and the SW lingers. `adb shell pm clear app.vshub.gnotes` (wipe app storage) clears it. This does not affect real users: a first-time native install never had that SW. Only matters when reinstalling across the web-to-native transition on the same device.
+
+Also fixed in passing: `capacitor.config.ts` was not in any tsconfig, which broke `pnpm lint` (type-aware ESLint could not resolve it). Added it to `tsconfig.node.json`'s `include` alongside `vite.config.ts`.
 
 ### Fix B: allow the native origin at the edge (CORS)
 

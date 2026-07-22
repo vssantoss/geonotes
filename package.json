@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:native": "CAPACITOR_BUILD=1 VITE_API_URL=https://gnotes.vshub.app pnpm build && cap sync android",
     "preview": "wrangler dev --port 8788 --ip 0.0.0.0",
     "deploy": "pnpm build && wrangler deploy",
     "test": "vitest run",
