@@ -2,5 +2,8 @@
 include ':capacitor-android'
 project(':capacitor-android').projectDir = new File('../node_modules/.pnpm/@capacitor+android@8.4.2_@capacitor+core@8.4.2/node_modules/@capacitor/android/capacitor')
 
+include ':capgo-capacitor-passkey'
+project(':capgo-capacitor-passkey').projectDir = new File('../node_modules/.pnpm/@capgo+capacitor-passkey@8.4.0_@capacitor+core@8.4.2/node_modules/@capgo/capacitor-passkey/android')
+
 include ':capacitor-secure-storage-plugin'
 project(':capacitor-secure-storage-plugin').projectDir = new File('../node_modules/.pnpm/capacitor-secure-storage-plugin@0.13.0_@capacitor+core@8.4.2/node_modules/capacitor-secure-storage-plugin/android')

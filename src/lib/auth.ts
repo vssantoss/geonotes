@@ -1,8 +1,9 @@
-import { startAuthentication, startRegistration } from '@simplewebauthn/browser'
 import type {
+  AuthenticationResponseJSON,
   PublicKeyCredentialCreationOptionsJSON,
   PublicKeyCredentialRequestOptionsJSON,
 } from '@simplewebauthn/browser'
+import { passkeyCreate, passkeyGet } from './passkey'
 import { apiFetch } from './api'
 import { clearSessionToken, setSessionToken } from './native-session'
 import { db, KV, kvGet, kvSet } from './db'
@@ -44,9 +45,9 @@ export async function passkeyLogin(): Promise<PendingSignIn> {
     options: PublicKeyCredentialRequestOptionsJSON
     challengeToken: string
   }>('/api/auth/passkey-login-options', {})
-  let response: Awaited<ReturnType<typeof startAuthentication>>
+  let response: AuthenticationResponseJSON
   try {
-    response = await startAuthentication({ optionsJSON: options })
+    response = await passkeyGet(options)
   } catch (err) {
     throw new PasskeyUnavailableError(err)
   }
@@ -127,7 +128,7 @@ export async function createAccountWithPasskey(
     options: PublicKeyCredentialCreationOptionsJSON
     challengeToken: string
   }>('/api/auth/passkey-register-options', { enrollToken })
-  const response = await startRegistration({ optionsJSON: options })
+  const response = await passkeyCreate(options)
   const out = await apiFetch<{ ok: boolean; token?: string }>('/api/auth/passkey-register', {
     email,
     response,

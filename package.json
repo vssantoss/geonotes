@@ -16,6 +16,7 @@
   "dependencies": {
     "@capacitor/android": "8.4.2",
     "@capacitor/core": "8.4.2",
+    "@capgo/capacitor-passkey": "8.4.0",
     "@fontsource-variable/bricolage-grotesque": "5.2.10",
     "@simplewebauthn/browser": "13.3.0",
     "@simplewebauthn/server": "13.3.2",

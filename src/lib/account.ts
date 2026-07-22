@@ -1,5 +1,5 @@
-import { startRegistration } from '@simplewebauthn/browser'
 import type { PublicKeyCredentialCreationOptionsJSON } from '@simplewebauthn/browser'
+import { passkeyCreate } from './passkey'
 import { apiFetch } from './api'
 import { db, KV, kvGet, kvSet } from './db'
 import { hashAccount, confirmEmailCode } from './auth'
@@ -56,7 +56,7 @@ export async function addPasskey(label?: string): Promise<void> {
     options: PublicKeyCredentialCreationOptionsJSON
     challengeToken: string
   }>('/api/auth/credentials/register-options', {})
-  const response = await startRegistration({ optionsJSON: options })
+  const response = await passkeyCreate(options)
   await apiFetch<{ ok: boolean }>('/api/auth/credentials/register', {
     response,
     challengeToken,
