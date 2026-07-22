@@ -1,5 +1,9 @@
 ext {
-    minSdkVersion = 24
+    // API 28+ (Android 9): passkey create/get through Android Credential Manager
+    // is only backed by Google Play Services from here up; on older releases the
+    // ceremony fails. This native build exists to do passkeys, so it should not
+    // install where they cannot work. Was 24 (the Capacitor default).
+    minSdkVersion = 28
     compileSdkVersion = 36
     targetSdkVersion = 36
     androidxActivityVersion = '1.11.0'
