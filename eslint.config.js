@@ -14,7 +14,7 @@ import tseslint from 'typescript-eslint'
  * typescript-eslint hard-refuses to run on TypeScript 7.
  */
 export default tseslint.config(
-  { ignores: ['dist', 'dev-dist', 'android', 'node_modules', '.wrangler'] },
+  { ignores: ['dist', 'dev-dist', 'android', 'assets', 'node_modules', '.wrangler'] },
 
   js.configs.recommended,
   tseslint.configs.recommendedTypeChecked,

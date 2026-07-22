@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Canonical adaptive icon: full-bleed red background layer plus a foreground
+     whose glyph is already scaled into the safe zone (see the foreground source
+     SVG). @capacitor/assets emits <inset ... 16.7%> on BOTH layers, which would
+     shrink the solid background into a 66.6% square (transparent corners under a
+     circular mask) and double-shrink the glyph, so the insets are removed here. -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-    <background android:drawable="@color/ic_launcher_background"/>
-    <foreground android:drawable="@mipmap/ic_launcher_foreground"/>
+    <background android:drawable="@mipmap/ic_launcher_background" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
 </adaptive-icon>
