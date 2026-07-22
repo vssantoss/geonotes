@@ -108,8 +108,9 @@ Also fixed in passing: `capacitor.config.ts` was not in any tsconfig, which brok
 
 ### Fix B: allow the native origin at the edge (CORS)
 
-- [ ] Worker: add CORS for the Capacitor origins (`https://localhost` on Android, `capacitor://localhost` on iOS) on `/api/*`, including preflight (`OPTIONS`) and credentialed-request handling, without loosening `SameSite`, the `__Host-` prefix, or `requireTrustedOrigin` for the web flow
-- [ ] Verify every `/api/*` call reaches the Worker and returns JSON from the WebView
+- [x] Worker: added `worker/_lib/cors.ts`, a Hono middleware wired first on `/api/*` in `router.ts`. Allowlists exactly `https://localhost` (Android) and `capacitor://localhost` (iOS); answers the `OPTIONS` preflight directly (204 + allowed origin/methods/headers/max-age) and reflects the allowed origin (+ `Vary: Origin`) onto every `/api` response, including errors, so a 403 stays readable rather than opaque. Deliberately sends **no** `Access-Control-Allow-Credentials`: native uses a bearer token (Fix C), not the cookie, so `SameSite`, the `__Host-` prefix, and `requireTrustedOrigin` are all untouched for the web flow. 7 unit tests added.
+- [x] Verified against the built Worker (curl, 2026-07-21/22): preflights from both native origins return 204 with the reflected origin; native GET/POST responses (incl. the 400 and the origin-check 403) carry the header; untrusted origins and same-origin web requests get none; `Allow-Credentials` never appears. A native POST now moves past CORS to the `requireTrustedOrigin` 403, which is the Fix C wall.
+  - [ ] Live confirmation from the emulator WebView still pending: it needs the CORS Worker reachable at `gnotes.vshub.app`, i.e. a production (or staging) deploy. Not yet deployed.
 
 ### Fix C: native-aware auth transport (cookie -> bearer token)
 
