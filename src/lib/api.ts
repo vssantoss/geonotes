@@ -1,9 +1,12 @@
+import { getSessionToken } from './native-session'
+
 // Empty in web builds so requests stay same-origin and the session cookie is
 // attached. The native (Capacitor) build sets VITE_API_URL to the deployed
 // origin (see `build:native`) because its webview runs from `https://localhost`
 // and must reach the API cross-origin. Cross-origin means the cookie will not
-// ride along, so the native build still needs the bearer-token transport
-// (Phase 2 Fix C); this constant only fixes where the request is sent.
+// ride along, so the native build sends the session token as a bearer instead
+// (see the Authorization header below); this constant only fixes where the
+// request is sent.
 const API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? ''
 
 /** Error thrown for non-2xx API responses, carrying the HTTP status. */
@@ -27,11 +30,15 @@ export class ApiError extends Error {
  * @throws ApiError on non-2xx responses (status 401 means the session is invalid).
  */
 export async function apiFetch<T>(path: string, body?: unknown, method?: string): Promise<T> {
+  // Native builds carry the session as a bearer token; on web this is always
+  // null and the request authenticates by the same-origin cookie instead.
+  const token = await getSessionToken()
   const res = await fetch(API_BASE + path, {
     method: method ?? (body !== undefined ? 'POST' : 'GET'),
     credentials: 'same-origin',
     headers: {
       ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   })

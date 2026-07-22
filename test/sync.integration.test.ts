@@ -39,8 +39,8 @@ afterEach(async () => {
  * @returns The `name=value` pair from the Set-Cookie header.
  */
 async function signIn(userId: string): Promise<string> {
-  const setCookie = await createSession(ctx.env, userId, new Request(`${TEST_ORIGIN}/api/sync`))
-  return setCookie.split(';')[0]
+  const { cookie } = await createSession(ctx.env, userId, new Request(`${TEST_ORIGIN}/api/sync`))
+  return cookie.split(';')[0]
 }
 
 /**
@@ -258,5 +258,61 @@ describe('sync validation', () => {
 
   it('rejects a request with no session', async () => {
     expect((await post({ ops: [], since: null }, null)).status).toBe(401)
+  })
+})
+
+// The native (Capacitor) webview is cross-origin to the API and cannot send the
+// session cookie, so it authenticates with the raw token as an Authorization
+// bearer. Its Origin (https://localhost) never matches env.ORIGIN, so this also
+// exercises the requireTrustedOrigin bearer exemption end to end against real
+// SQLite: without it every native POST would 403 before reaching the handler.
+describe('native bearer authentication', () => {
+  const ANDROID_ORIGIN = 'https://localhost'
+
+  /**
+   * Posts a sync body authenticated by bearer token from the native origin,
+   * carrying no cookie, the way the Capacitor build does.
+   *
+   * @param token The raw session token to present.
+   * @param body The sync request body.
+   * @returns The router's response.
+   */
+  async function postAsNative(token: string, body: unknown): Promise<Response> {
+    return app.request(
+      '/api/sync',
+      {
+        method: 'POST',
+        headers: {
+          Origin: ANDROID_ORIGIN,
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      },
+      ctx.env,
+    )
+  }
+
+  it('authenticates a native cross-origin POST that carries no cookie', async () => {
+    const { token } = await createSession(ctx.env, USER, new Request(`${TEST_ORIGIN}/api/sync`))
+
+    const res = await postAsNative(token, {
+      ops: [{ op: 'upsert', note: note('n1', { text: 'from native' }) }],
+      since: null,
+    })
+    expect(res.status).toBe(200)
+
+    // The note landed under USER, provable by pulling it back over the cookie.
+    const pulled = await sync([], null)
+    expect(pulled.notes).toHaveLength(1)
+    expect(pulled.notes[0]).toMatchObject({ id: 'n1', text: 'from native' })
+  })
+
+  it('rejects a native POST bearing an unknown token with 401, not 403', async () => {
+    // 401 (failed auth) rather than 403 (bad origin) confirms the request cleared
+    // the origin gate on the strength of the bearer header, then failed only
+    // because the token matches no session.
+    const res = await postAsNative('not-a-real-token', { ops: [], since: null })
+    expect(res.status).toBe(401)
   })
 })

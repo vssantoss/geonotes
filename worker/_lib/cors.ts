@@ -27,6 +27,21 @@ function nativeOrigin(request: Request): string | null {
 }
 
 /**
+ * Reports whether a request comes from a trusted native webview origin. Login
+ * endpoints use this to decide whether to return the raw session token in the
+ * response body: native needs it for the bearer transport, but the web must
+ * never receive it there (its token stays HttpOnly in the cookie, out of reach
+ * of XSS). The Origin header is browser-controlled and unforgeable by page
+ * script, so a web XSS running at env.ORIGIN cannot pass this check.
+ *
+ * @param request - the incoming request.
+ * @returns true when the Origin is a trusted native webview origin.
+ */
+export function isNativeOrigin(request: Request): boolean {
+  return nativeOrigin(request) !== null
+}
+
+/**
  * Hono middleware that grants CORS to the native (Capacitor) webview origins on
  * /api/*, and only those. It answers the browser's preflight (OPTIONS) directly
  * and reflects the allowed origin onto every /api response, successes and errors

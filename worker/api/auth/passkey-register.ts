@@ -3,6 +3,7 @@ import { isoBase64URL } from '@simplewebauthn/server/helpers'
 import type { RegistrationResponseJSON } from '@simplewebauthn/server'
 import { json, HttpError, route } from '../../_lib/http'
 import { createSession } from '../../_lib/session'
+import { isNativeOrigin } from '../../_lib/cors'
 import { consumeChallenge } from '../../_lib/challenge'
 import { getEmailSender } from '../../_lib/email'
 import { normalizeEmail } from './email-request'
@@ -81,7 +82,11 @@ export const onRequestPost = route<Env>(async ({ env, request, waitUntil }) => {
     waitUntil(getEmailSender(env).sendWelcome(email).catch(() => {}))
   }
 
-  const response = json({ ok: true })
-  response.headers.append('Set-Cookie', await createSession(env, user.id, request))
+  // Web stores the session in the cookie; native also gets the raw token in the
+  // body for its bearer transport (never returned to web, where it must stay
+  // HttpOnly). See passkey-login for the same split.
+  const { token, cookie } = await createSession(env, user.id, request)
+  const response = json({ ok: true, ...(isNativeOrigin(request) ? { token } : {}) })
+  response.headers.append('Set-Cookie', cookie)
   return response
 })

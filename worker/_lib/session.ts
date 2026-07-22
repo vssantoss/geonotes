@@ -1,4 +1,4 @@
-import { HttpError } from './http'
+import { HttpError, readBearerToken } from './http'
 import { randomHex, sha256Hex } from './crypto'
 import type { Env } from './env'
 
@@ -21,9 +21,14 @@ export const SESSION_REVOKED_REASON = 'session_revoked'
  * @param env - function environment.
  * @param userId - the authenticated user.
  * @param request - request carrying any session that should be rotated away.
- * @returns a Set-Cookie value containing the new opaque token.
+ * @returns the raw opaque token (for the native bearer transport) and the
+ *          Set-Cookie value that carries it for the web.
  */
-export async function createSession(env: Env, userId: string, request: Request): Promise<string> {
+export async function createSession(
+  env: Env,
+  userId: string,
+  request: Request,
+): Promise<{ token: string; cookie: string }> {
   const token = randomHex(32)
   const now = Date.now()
   // A public per-session id (used to revoke a specific session), plus creation
@@ -60,11 +65,14 @@ export async function createSession(env: Env, userId: string, request: Request):
   }
   statements.push(insert)
   await env.DB.batch(statements)
-  return buildSessionCookie(token, SESSION_TTL_MS / 1000)
+  return { token, cookie: buildSessionCookie(token, SESSION_TTL_MS / 1000) }
 }
 
 /**
- * Authenticates a request via its host-only HttpOnly session cookie.
+ * Authenticates a request via its session token. The token is taken from the
+ * Authorization bearer header when present (native clients), otherwise from the
+ * host-only HttpOnly cookie (web). Both transports carry the same opaque token
+ * and resolve against the same sessions table.
  *
  * @param env - function environment.
  * @param request - incoming request.
@@ -72,7 +80,7 @@ export async function createSession(env: Env, userId: string, request: Request):
  * @throws HttpError(401) when the token is missing, unknown or expired.
  */
 export async function requireUser(env: Env, request: Request): Promise<string> {
-  const token = readSessionCookie(request)
+  const token = requestToken(request)
   if (!token) throw new HttpError(401, 'missing token')
   const tokenHash = await sha256Hex(token)
   const row = await env.DB.prepare(
@@ -109,7 +117,7 @@ export async function requireUser(env: Env, request: Request): Promise<string> {
  * @returns a Set-Cookie value that expires the browser cookie.
  */
 export async function destroySession(env: Env, request: Request): Promise<string> {
-  const token = readSessionCookie(request)
+  const token = requestToken(request)
   if (token) {
     await env.DB.prepare('DELETE FROM sessions WHERE token_hash = ?')
       .bind(await sha256Hex(token))
@@ -137,8 +145,21 @@ export function buildSessionCookie(token: string, maxAge: number): string {
  * @returns the stored token hash, or null when no session cookie is present.
  */
 export async function currentSessionHash(request: Request): Promise<string | null> {
-  const token = readSessionCookie(request)
+  const token = requestToken(request)
   return token ? sha256Hex(token) : null
+}
+
+/**
+ * Resolves the request's session token, preferring the Authorization bearer
+ * header (native) over the cookie (web). When a bearer header is present it is
+ * used exclusively: a request that presents a bearer credential is never also
+ * authenticated by any ambient cookie it happens to carry.
+ *
+ * @param request - incoming request.
+ * @returns the session token, or null when neither transport carries one.
+ */
+function requestToken(request: Request): string | null {
+  return readBearerToken(request) ?? readSessionCookie(request)
 }
 
 /**

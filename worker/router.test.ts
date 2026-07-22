@@ -195,8 +195,9 @@ describe('CORS for native origins', () => {
   })
 
   it('keeps the origin/CSRF rejection readable to the native client', async () => {
-    // A native POST still fails requireTrustedOrigin (that is Fix C's job), but
-    // the 403 must carry CORS headers or it surfaces as an opaque fetch failure.
+    // A native POST with no bearer token is still an ambient-credential request,
+    // so requireTrustedOrigin rejects it; the 403 must carry CORS headers or it
+    // surfaces as an opaque fetch failure rather than a readable body.
     const res = await app.request(
       '/api/sync',
       { method: 'POST', headers: { Origin: ANDROID_ORIGIN } },
@@ -204,6 +205,27 @@ describe('CORS for native origins', () => {
     )
     expect(res.status).toBe(403)
     expect(res.headers.get('access-control-allow-origin')).toBe(ANDROID_ORIGIN)
+  })
+
+  it('lets a bearer-token POST clear the origin gate the cookie flow cannot skip', async () => {
+    // Fix C: a request that authenticates by bearer token cannot be forged
+    // cross-site (a page cannot read the token), so it is exempt from the Origin
+    // check. With no session row behind the token it then fails auth with 401 --
+    // that it is 401 and not 403 'bad origin' is the proof it passed the gate.
+    const res = await app.request(
+      '/api/sync',
+      {
+        method: 'POST',
+        headers: {
+          Origin: ANDROID_ORIGIN,
+          Authorization: 'Bearer some-native-token',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ops: [], since: null }),
+      },
+      fakeEnv(fakeDb().db),
+    )
+    expect(res.status).toBe(401)
   })
 
   it('never allows credentialed (cookie) cross-origin sharing', async () => {

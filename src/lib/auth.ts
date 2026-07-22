@@ -4,6 +4,7 @@ import type {
   PublicKeyCredentialRequestOptionsJSON,
 } from '@simplewebauthn/browser'
 import { apiFetch } from './api'
+import { clearSessionToken, setSessionToken } from './native-session'
 import { db, KV, kvGet, kvSet } from './db'
 import { syncNow, wipeLocalAccountData } from './sync'
 
@@ -49,10 +50,15 @@ export async function passkeyLogin(): Promise<PendingSignIn> {
   } catch (err) {
     throw new PasskeyUnavailableError(err)
   }
-  const out = await apiFetch<{ email: string }>('/api/auth/passkey-login', {
+  const out = await apiFetch<{ email: string; token?: string }>('/api/auth/passkey-login', {
     response,
     challengeToken,
   })
+  // Native gets the session token in the body (web gets it as an HttpOnly
+  // cookie, so out.token is undefined there and this is a no-op). Store it now,
+  // before finishSignIn or cancelPendingSignIn, so the follow-up requests those
+  // make can authenticate with the bearer.
+  await setSessionToken(out.token)
   return { email: out.email }
 }
 
@@ -122,11 +128,14 @@ export async function createAccountWithPasskey(
     challengeToken: string
   }>('/api/auth/passkey-register-options', { enrollToken })
   const response = await startRegistration({ optionsJSON: options })
-  await apiFetch<{ ok: boolean }>('/api/auth/passkey-register', {
+  const out = await apiFetch<{ ok: boolean; token?: string }>('/api/auth/passkey-register', {
     email,
     response,
     challengeToken,
   })
+  // Store the native bearer token (undefined, so a no-op, on web). See
+  // passkeyLogin for why this happens before the sign-in is applied.
+  await setSessionToken(out.token)
   return { email }
 }
 
@@ -172,6 +181,9 @@ export async function finishSignIn(pending: PendingSignIn): Promise<void> {
  */
 export async function cancelPendingSignIn(): Promise<void> {
   await apiFetch('/api/auth/logout', {}).catch(() => {})
+  // Drop the native bearer after the revocation request, which needed it to name
+  // the session being revoked (no-op on web).
+  await clearSessionToken()
 }
 
 /**
@@ -231,6 +243,9 @@ export async function signOut(keepNotes: boolean): Promise<void> {
   await syncNow()
   // Best-effort revocation; local sign-out proceeds even when offline.
   await apiFetch('/api/auth/logout', {}).catch(() => {})
+  // Drop the native bearer after the revocation request (no-op on web). Done for
+  // both branches: once signed out, apiFetch must stop sending the dead token.
+  await clearSessionToken()
   if (!keepNotes) {
     // Same wipe a remote revocation applies: notes, outbox and every account
     // marker removed together.

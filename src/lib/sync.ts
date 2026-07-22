@@ -1,5 +1,6 @@
 import { db, KV, kvGet, kvSet } from './db'
 import { ApiError, apiFetch, reverseGeocode } from './api'
+import { clearSessionToken } from './native-session'
 import type { Note, SyncOp, SyncRequest, SyncResponse } from '../../shared/types'
 
 /** Sync engine state exposed to the UI. */
@@ -139,6 +140,11 @@ export async function wipeLocalAccountData(): Promise<void> {
     await kvSet(KV.userEmail, null)
     await kvSet(KV.syncCursor, null)
   })
+  // The account is gone from this device, so the native bearer token (issued for
+  // this now-revoked session) must go too, or apiFetch keeps presenting a dead
+  // token. No-op on web, where the session lived in the cookie. Outside the
+  // Dexie transaction above because it is a native-plugin call, not a DB write.
+  await clearSessionToken()
 }
 
 /**

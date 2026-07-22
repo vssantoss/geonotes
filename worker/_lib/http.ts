@@ -67,13 +67,37 @@ interface RouteEnv {
 /**
  * Rejects cross-origin state-changing requests before route logic runs.
  *
+ * The Origin check defends the ambient session cookie against CSRF. A request
+ * that authenticates with a bearer token is immune: a cross-site page cannot
+ * read the token to attach it, so the attacker-forged request never carries one.
+ * Native (Capacitor) clients use exactly that bearer transport, which is how
+ * they clear this gate without the web cookie's Origin protection being relaxed.
+ *
  * @param env - function environment containing the allowed web origin.
  * @param request - incoming request.
- * @throws HttpError(403) when an unsafe request has no matching Origin header.
+ * @throws HttpError(403) when an unsafe cookie request has no matching Origin.
  */
 function requireTrustedOrigin(env: RouteEnv, request: Request): void {
   if (request.method === 'GET' || request.method === 'HEAD' || request.method === 'OPTIONS') return
+  if (readBearerToken(request) !== null) return
   if (!hasTrustedOrigin(request, env.ORIGIN)) throw new HttpError(403, 'bad origin')
+}
+
+/**
+ * Reads a bearer token from the Authorization header. Native (Capacitor)
+ * clients authenticate with this instead of the session cookie, which the
+ * webview cannot send cross-origin.
+ *
+ * @param request - incoming request.
+ * @returns the token, or null when no non-empty Bearer credential is present.
+ */
+export function readBearerToken(request: Request): string | null {
+  const header = request.headers.get('Authorization')
+  if (!header) return null
+  const [scheme, ...rest] = header.split(' ')
+  if (scheme.toLowerCase() !== 'bearer') return null
+  const token = rest.join(' ').trim()
+  return token.length > 0 ? token : null
 }
 
 /**

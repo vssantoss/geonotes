@@ -374,7 +374,7 @@ describe('purging abandoned accounts', () => {
 
 describe('sessions of a deleted account', () => {
   it('stops authenticating once deletion is requested', async () => {
-    const setCookie = await createSession(ctx.env, USER, new Request(`${TEST_ORIGIN}/api/sync`))
+    const { cookie: setCookie } = await createSession(ctx.env, USER, new Request(`${TEST_ORIGIN}/api/sync`))
     const cookie = setCookie.split(';')[0]
 
     await requestAccountDeletion(ctx.env, USER, Date.now())
@@ -388,7 +388,7 @@ describe('sessions of a deleted account', () => {
     // deleted account sitting on every other device the user was signed in on,
     // because the client keeps local data across an ordinary expiry and only
     // wipes on SESSION_REVOKED_REASON (see the handler in src/lib/sync.ts).
-    const setCookie = await createSession(ctx.env, USER, new Request(`${TEST_ORIGIN}/api/sync`))
+    const { cookie: setCookie } = await createSession(ctx.env, USER, new Request(`${TEST_ORIGIN}/api/sync`))
     const cookie = setCookie.split(';')[0]
 
     await requestAccountDeletion(ctx.env, USER, Date.now())
