@@ -1,4 +1,5 @@
 import type { Context } from 'hono'
+import { isNativeOrigin } from './cors'
 
 /**
  * Security headers applied to every API response.
@@ -70,8 +71,17 @@ interface RouteEnv {
  * The Origin check defends the ambient session cookie against CSRF. A request
  * that authenticates with a bearer token is immune: a cross-site page cannot
  * read the token to attach it, so the attacker-forged request never carries one.
- * Native (Capacitor) clients use exactly that bearer transport, which is how
- * they clear this gate without the web cookie's Origin protection being relaxed.
+ * Native (Capacitor) clients use exactly that bearer transport once signed in,
+ * which is how they clear this gate without the web cookie's Origin protection
+ * being relaxed.
+ *
+ * The login bootstrap has no bearer yet: passkey and e-mail sign-in fetch their
+ * options and post their result before any token exists, and the native webview
+ * sends those from https://localhost, which is not env.ORIGIN. A request from a
+ * trusted native origin is still no CSRF risk to the cookie, because CORS never
+ * grants those origins Access-Control-Allow-Credentials, so the browser never
+ * attaches the env.ORIGIN cookie to them, and the native-origin allowlist cannot
+ * be forged by page script. So an exact native-origin match clears the gate too.
  *
  * @param env - function environment containing the allowed web origin.
  * @param request - incoming request.
@@ -80,6 +90,7 @@ interface RouteEnv {
 function requireTrustedOrigin(env: RouteEnv, request: Request): void {
   if (request.method === 'GET' || request.method === 'HEAD' || request.method === 'OPTIONS') return
   if (readBearerToken(request) !== null) return
+  if (isNativeOrigin(request)) return
   if (!hasTrustedOrigin(request, env.ORIGIN)) throw new HttpError(403, 'bad origin')
 }
 

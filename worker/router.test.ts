@@ -194,17 +194,37 @@ describe('CORS for native origins', () => {
     expect(res.headers.get('vary')).toBe('Origin')
   })
 
-  it('keeps the origin/CSRF rejection readable to the native client', async () => {
-    // A native POST with no bearer token is still an ambient-credential request,
-    // so requireTrustedOrigin rejects it; the 403 must carry CORS headers or it
-    // surfaces as an opaque fetch failure rather than a readable body.
+  it('lets a bearerless native POST clear the origin gate for the login bootstrap', async () => {
+    // Passkey and e-mail sign-in fetch options and post their result before any
+    // bearer exists, from the native origin (https://localhost), which is not
+    // env.ORIGIN. A trusted native origin is no CSRF risk to the cookie (CORS
+    // never grants it Allow-Credentials), so it clears the gate. That it reaches
+    // auth and fails 401 -- not 403 'bad origin' -- is the proof it passed.
     const res = await app.request(
       '/api/sync',
-      { method: 'POST', headers: { Origin: ANDROID_ORIGIN } },
+      {
+        method: 'POST',
+        headers: { Origin: ANDROID_ORIGIN, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ops: [], since: null }),
+      },
+      fakeEnv(fakeDb().db),
+    )
+    expect(res.status).toBe(401)
+    // The error response still reflects the origin so the WebView can read it
+    // rather than see an opaque CORS failure.
+    expect(res.headers.get('access-control-allow-origin')).toBe(ANDROID_ORIGIN)
+  })
+
+  it('still rejects a foreign-origin bearerless POST as bad origin', async () => {
+    // The native exemption is an exact allowlist; an arbitrary cross-site origin
+    // with no bearer is still a CSRF attempt against the cookie and stays 403.
+    const res = await app.request(
+      '/api/sync',
+      { method: 'POST', headers: { Origin: 'https://evil.example' } },
       fakeEnv(fakeDb().db),
     )
     expect(res.status).toBe(403)
-    expect(res.headers.get('access-control-allow-origin')).toBe(ANDROID_ORIGIN)
+    expect(await res.text()).toBe('bad origin')
   })
 
   it('lets a bearer-token POST clear the origin gate the cookie flow cannot skip', async () => {
