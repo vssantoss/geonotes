@@ -120,6 +120,13 @@ export async function passkeyGet(
 ): Promise<AuthenticationResponseJSON> {
   if (Capacitor.isNativePlatform()) {
     const cred = await CapacitorPasskey.getCredential({
+      // The plugin's createNativeRequest picks the get vs create code path by
+      // `'mediation' in options`, not by which method was called. Without a
+      // mediation key an authentication request is misrouted into the create
+      // branch, which reads options.publicKey.rp.id and throws synchronously
+      // (login options carry rpId, not rp.id), so the ceremony never reaches
+      // Credential Manager. 'optional' selects a normal modal passkey prompt.
+      mediation: 'optional',
       publicKey: options as unknown as PasskeyPublicKeyCredentialRequestOptionsJSON,
     })
     return toAuthenticationResponseJSON(cred)
