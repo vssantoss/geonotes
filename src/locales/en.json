@@ -22,6 +22,8 @@
   "auth.devCode": "Dev code: {code}",
   "auth.error.badCode": "That code is incorrect or expired. Please try again.",
   "auth.error.generic": "Something went wrong. Please try again.",
+  "auth.error.offline": "You're offline. Signing in needs an internet connection; your notes keep working without one.",
+  "auth.error.unreachable": "Couldn't reach GeoNotes. Check your connection and try again.",
   "auth.error.passkeyNotRecognized": "That passkey isn't linked to an account. Try again, or create a new account.",
   "auth.switchAccountWarning": "This device has notes from a different account. Signing in here will remove them from this device. They stay safe in that account.",
   "auth.switchAccountConfirm": "Switch and remove",

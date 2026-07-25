@@ -15,6 +15,7 @@ import {
 } from '../lib/auth'
 import { getPlayIntegrityToken } from '../lib/play-integrity'
 import { ApiError } from '../lib/api'
+import { authErrorKey } from '../lib/auth-error'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { TurnstileWidget, TURNSTILE_REQUIRED } from '../components/TurnstileWidget'
 import { useT } from '../lib/i18n'
@@ -95,9 +96,14 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
           setStep('noPasskey')
         } else {
           setError(
-            err instanceof ApiError && err.status === 401
-              ? t('auth.error.passkeyNotRecognized')
-              : t('auth.error.generic'),
+            t(
+              authErrorKey(
+                err,
+                err instanceof ApiError && err.status === 401
+                  ? 'auth.error.passkeyNotRecognized'
+                  : 'auth.error.generic',
+              ),
+            ),
           )
         }
         setBusy(false)
@@ -110,9 +116,9 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
           await finishSignIn(signIn)
           onSignedIn()
         }
-      } catch {
+      } catch (err) {
         await cancelPendingSignIn()
-        setError(t('auth.error.generic'))
+        setError(t(authErrorKey(err)))
       } finally {
         setBusy(false)
       }
@@ -163,7 +169,7 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
         setStep('code')
         resendCooldown.start()
       } else {
-        setError(t('auth.error.generic'))
+        setError(t(authErrorKey(err)))
       }
     } finally {
       setBusy(false)
@@ -193,9 +199,14 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
         setEnrollToken(token)
       } catch (err) {
         setError(
-          err instanceof ApiError && err.status === 401
-            ? t('auth.error.badCode')
-            : t('auth.error.generic'),
+          t(
+            authErrorKey(
+              err,
+              err instanceof ApiError && err.status === 401
+                ? 'auth.error.badCode'
+                : 'auth.error.generic',
+            ),
+          ),
         )
         setBusy(false)
         return
@@ -231,9 +242,9 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
     try {
       await finishSignIn(await createAccountWithPasskey(email, token))
       onSignedIn()
-    } catch {
+    } catch (err) {
       await cancelPendingSignIn()
-      setError(t('auth.error.generic'))
+      setError(t(authErrorKey(err)))
       setBusy(false)
     }
   }

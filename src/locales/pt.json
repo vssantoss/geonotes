@@ -22,6 +22,8 @@
   "auth.devCode": "Código de desenvolvimento: {code}",
   "auth.error.badCode": "Esse código está incorreto ou expirou. Tente novamente.",
   "auth.error.generic": "Algo deu errado. Tente novamente.",
+  "auth.error.offline": "Você está sem conexão. Entrar exige internet; suas notas continuam funcionando sem ela.",
+  "auth.error.unreachable": "Não foi possível conectar ao GeoNotes. Verifique sua conexão e tente novamente.",
   "auth.error.passkeyNotRecognized": "Essa chave de acesso não está vinculada a nenhuma conta. Tente novamente ou crie uma conta nova.",
   "auth.switchAccountWarning": "Este dispositivo tem notas de outra conta. Entrar aqui vai removê-las deste dispositivo. Elas continuam salvas naquela conta.",
   "auth.switchAccountConfirm": "Trocar e remover",
