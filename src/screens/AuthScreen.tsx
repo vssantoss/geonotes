@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Capacitor } from '@capacitor/core'
 import { MapPin } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -7,12 +8,14 @@ import {
   cancelPendingSignIn,
   createAccountWithPasskey,
   finishSignIn,
+  hashAccount,
   passkeyLogin,
   PasskeyUnavailableError,
   requestEmailCode,
   wouldDisplaceNotes,
   type PendingSignIn,
 } from '../lib/auth'
+import { getPlayIntegrityToken } from '../lib/play-integrity'
 import { ApiError } from '../lib/api'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { TurnstileWidget, TURNSTILE_SITEKEY } from '../components/TurnstileWidget'
@@ -73,7 +76,10 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
   // when a sitekey is configured; otherwise the server skips verification.
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
   const [turnstileReset, setTurnstileReset] = useState(0)
-  const turnstileRequired = TURNSTILE_SITEKEY !== ''
+  // Turnstile is a web-only gate: the native Android build proves it is a genuine
+  // app with Play Integrity instead (fetched per send in sendCode), and the widget
+  // cannot run inside its https://localhost webview, so never require it there.
+  const turnstileRequired = !Capacitor.isNativePlatform() && TURNSTILE_SITEKEY !== ''
 
   /**
    * Runs a passkey login ceremony, then either applies it or, when it would
@@ -146,7 +152,13 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
     setCode('')
     setEnrollToken(null)
     try {
-      const { devCode: dev } = await requestEmailCode(email, mode, turnstileToken)
+      // On native Android there is no Turnstile token; obtain a Play Integrity
+      // token bound to this address (the server re-derives the same sha256(email)
+      // hash to match it). No-op on web, where getPlayIntegrityToken returns null.
+      const integrityToken = Capacitor.isNativePlatform()
+        ? await getPlayIntegrityToken(await hashAccount(email))
+        : null
+      const { devCode: dev } = await requestEmailCode(email, mode, turnstileToken, integrityToken)
       setDevCode(dev ?? null)
       setStep('code')
       // A code went out (or, in recover mode, the request was accepted): begin

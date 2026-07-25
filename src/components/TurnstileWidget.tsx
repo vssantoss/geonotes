@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { Capacitor } from '@capacitor/core'
 
 /** Cloudflare's widget script; renders the challenge into a supplied element. */
 const SCRIPT_SRC = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
@@ -88,7 +89,9 @@ export function TurnstileWidget({
   // is stable, so this runs once per mounted instance.
   useEffect(() => {
     const container = containerRef.current
-    if (!TURNSTILE_SITEKEY || !container) return
+    // Never render on native: the widget's postMessage handshake breaks in the
+    // app's https://localhost webview, and native uses Play Integrity instead.
+    if (!TURNSTILE_SITEKEY || Capacitor.isNativePlatform() || !container) return
     let cancelled = false
     loadTurnstile()
       .then((turnstile) => {
@@ -124,6 +127,6 @@ export function TurnstileWidget({
     }
   }, [resetSignal, onToken])
 
-  if (!TURNSTILE_SITEKEY) return null
+  if (!TURNSTILE_SITEKEY || Capacitor.isNativePlatform()) return null
   return <div ref={containerRef} className="flex justify-center" />
 }

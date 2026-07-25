@@ -47,4 +47,23 @@ export type Env = {
    * only after the matching client sitekey (VITE_TURNSTILE_SITEKEY) is deployed.
    */
   TURNSTILE_SECRET?: string
+  /**
+   * Google service-account JSON key for the Play Integrity API (set via
+   * `wrangler secret put PLAY_INTEGRITY_SA_JSON`, the full JSON file as one
+   * value). The native Android build has no Turnstile widget; it sends a Play
+   * Integrity token instead, which this key lets the Worker decode and verify
+   * against Google. When present, `email-request` accepts a valid Play Integrity
+   * token in lieu of a Turnstile token; when absent the native attestation check
+   * is skipped (local dev), mirroring TURNSTILE_SECRET's no-op behaviour.
+   */
+  PLAY_INTEGRITY_SA_JSON?: string
+  /**
+   * When truthy ('1' or 'true'), Play Integrity verification additionally
+   * requires full-strength verdicts (MEETS_DEVICE_INTEGRITY and a Play-recognized
+   * app). Left unset during development so a sideloaded debug build, which Google
+   * reports as UNRECOGNIZED_VERSION, still passes once its token decodes with a
+   * matching package and request hash. Set it once the app ships from a Play
+   * track.
+   */
+  PLAY_INTEGRITY_STRICT?: string
 }
