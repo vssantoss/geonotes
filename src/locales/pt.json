@@ -131,6 +131,7 @@
   "passkeys.current": "Em uso aqui",
   "passkeys.removeConfirm": "Remover esta chave de acesso? Você não poderá mais entrar com ela.",
   "passkeys.inUseError": "Esta é a chave de acesso com a qual você entrou, então não pode ser removida. Entre primeiro com outra.",
+  "passkeys.duplicateError": "Este dispositivo já tem uma chave de acesso para esta conta, então não é possível adicionar outra aqui.",
   "passkeys.removeConfirmYes": "Remover chave",
   "passkeys.lastError": "Esta é sua única chave de acesso, então não pode ser removida. Adicione outra primeiro.",
   "sessions.title": "Sessões ativas",

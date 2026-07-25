@@ -131,6 +131,7 @@
   "passkeys.current": "Used here",
   "passkeys.removeConfirm": "Remove this passkey? You won't be able to sign in with it anymore.",
   "passkeys.inUseError": "This is the passkey you signed in with, so it can't be removed. Sign in with another one first.",
+  "passkeys.duplicateError": "This device already has a passkey for this account, so another can't be added here.",
   "passkeys.removeConfirmYes": "Remove passkey",
   "passkeys.lastError": "This is your only passkey, so it can't be removed. Add another first.",
   "sessions.title": "Active sessions",

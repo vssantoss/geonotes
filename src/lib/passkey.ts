@@ -32,6 +32,40 @@ import type {
 // handle as null rather than omitting it).
 
 /**
+ * Thrown when the authenticator refuses to enroll because it already holds one
+ * of the credentials the server asked to exclude, i.e. this device already has
+ * a passkey for the account. WebAuthn reports it as InvalidStateError, and it
+ * is the one refusal worth naming: it is not a failure but a duplicate, and the
+ * user can only act on it if told so.
+ */
+export class PasskeyDuplicateError extends Error {
+  constructor() {
+    super('A passkey for this account already exists on this device')
+    this.name = 'PasskeyDuplicateError'
+  }
+}
+
+/**
+ * Recognises the InvalidStateError refusal across both platforms.
+ *
+ * The two transports report the same condition through different objects. The
+ * browser rejects with a real DOMException whose `name` is the WebAuthn error.
+ * The native plugin cannot: a Capacitor bridge call rejects with a plain Error
+ * carrying the DOM error class name in `code` (and in `data.name`), because
+ * `CreatePublicKeyCredentialDomException` is unwrapped to its `DomError` simple
+ * name on the Java side. Testing `instanceof DOMException` therefore only ever
+ * works on the web, which is why this checks the name rather than the type.
+ *
+ * @param err - the rejection from either transport.
+ * @returns whether it is the duplicate-credential refusal.
+ */
+function isInvalidStateError(err: unknown): boolean {
+  if (err instanceof DOMException) return err.name === 'InvalidStateError'
+  const { code, data } = (err ?? {}) as { code?: unknown; data?: { name?: unknown } }
+  return code === 'InvalidStateError' || data?.name === 'InvalidStateError'
+}
+
+/**
  * Reshapes a native registration credential into the WebAuthn JSON the server
  * verifies. The runtime fields already match; this only reconciles the types.
  *
@@ -89,21 +123,28 @@ function toAuthenticationResponseJSON(
  *
  * @param options - the creation option JSON from the server.
  * @returns the registration credential JSON to post back for verification.
- * @throws when the ceremony produces no credential (refused or cancelled); the
- *         caller decides whether to surface that as PasskeyUnavailableError.
+ * @throws PasskeyDuplicateError when the device already holds a passkey for the
+ *         account, normalised here so callers need not know how each platform
+ *         reports it. Any other refusal (including a cancel) is rethrown as it
+ *         arrived; the caller decides how to surface it.
  */
 export async function passkeyCreate(
   options: PublicKeyCredentialCreationOptionsJSON,
 ): Promise<RegistrationResponseJSON> {
-  if (Capacitor.isNativePlatform()) {
-    // The two option definitions are the same WebAuthn JSON with differently
-    // typed extension/transport fields, so cross the type boundary explicitly.
-    const cred = await CapacitorPasskey.createCredential({
-      publicKey: options as unknown as PasskeyPublicKeyCredentialCreationOptionsJSON,
-    })
-    return toRegistrationResponseJSON(cred)
+  try {
+    if (Capacitor.isNativePlatform()) {
+      // The two option definitions are the same WebAuthn JSON with differently
+      // typed extension/transport fields, so cross the type boundary explicitly.
+      const cred = await CapacitorPasskey.createCredential({
+        publicKey: options as unknown as PasskeyPublicKeyCredentialCreationOptionsJSON,
+      })
+      return toRegistrationResponseJSON(cred)
+    }
+    return await startRegistration({ optionsJSON: options })
+  } catch (err) {
+    if (isInvalidStateError(err)) throw new PasskeyDuplicateError()
+    throw err
   }
-  return startRegistration({ optionsJSON: options })
 }
 
 /**

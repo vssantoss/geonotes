@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { addPasskey, listPasskeys, removePasskey, type PasskeyInfo } from '@/lib/account'
+import { PasskeyDuplicateError } from '@/lib/passkey'
 import { ApiError } from '@/lib/api'
 import { settingsErrorKey } from '@/lib/auth-error'
 import { useOnline } from '@/hooks/useOnline'
@@ -65,9 +66,15 @@ export function PasskeysSection() {
       setAddingName(null)
       await reload()
     } catch (err) {
-      // A cancelled/failed browser ceremony is silent; a server rejection or a
-      // failed call surfaces. The passkey list is unchanged either way.
-      if (!(err instanceof DOMException)) {
+      // A duplicate is not a failure, so it is named rather than reported as a
+      // generic error: the device already has a passkey for the account and the
+      // user can only act on that if told. It must be checked before the
+      // DOMException swallow below, since on the web it arrives as one.
+      if (err instanceof PasskeyDuplicateError) {
+        setError(t('passkeys.duplicateError'))
+      } else if (!(err instanceof DOMException)) {
+        // A cancelled/failed browser ceremony is silent; a server rejection or a
+        // failed call surfaces. The passkey list is unchanged either way.
         const key = settingsErrorKey(err)
         setError(key && t(key))
       }
