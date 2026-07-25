@@ -122,6 +122,7 @@
   "passkeys.title": "Llaves de acceso",
   "passkeys.description": "Las llaves de acceso te permiten entrar en esta cuenta sin contraseña.",
   "passkeys.added": "Añadida el {date}",
+  "passkeys.addedFrom": "Añadida el {date} desde {device}",
   "passkeys.unnamed": "Llave de acceso",
   "passkeys.add": "Añadir una llave de acceso",
   "passkeys.nameLabel": "Nombre de la llave (opcional)",

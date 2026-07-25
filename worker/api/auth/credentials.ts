@@ -5,8 +5,9 @@ import type { Env } from '../../_lib/env'
 /**
  * GET /api/auth/credentials: lists the signed-in account's passkeys for the
  * settings screen. Returns each credential's id (needed to remove it), optional
- * friendly label, creation time and a `current` flag marking the passkey that
- * signed this session in. Never exposes public keys or other accounts.
+ * friendly label, creation time, the enrolling device's user agent (the client
+ * derives a label) and a `current` flag marking the passkey that signed this
+ * session in. Never exposes public keys or other accounts.
  *
  * `current` means "authorized the session making this request", not "is still
  * held by this device": sessions live seven days and are never re-verified
@@ -18,10 +19,10 @@ export const onRequestGet = route<Env>(async ({ env, request }) => {
   const userId = await requireUser(env, request)
   const currentId = await currentSessionCredentialId(env, request)
   const { results } = await env.DB.prepare(
-    'SELECT id, label, created_at FROM credentials WHERE user_id = ? ORDER BY created_at',
+    'SELECT id, label, created_at, user_agent FROM credentials WHERE user_id = ? ORDER BY created_at',
   )
     .bind(userId)
-    .all<{ id: string; label: string | null; created_at: number }>()
+    .all<{ id: string; label: string | null; created_at: number; user_agent: string | null }>()
   const credentials = results.map((c) => ({ ...c, current: c.id === currentId }))
   return json({ credentials })
 })

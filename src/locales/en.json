@@ -122,6 +122,7 @@
   "passkeys.title": "Passkeys",
   "passkeys.description": "Passkeys let you sign in on this account without a password.",
   "passkeys.added": "Added {date}",
+  "passkeys.addedFrom": "Added {date} from {device}",
   "passkeys.unnamed": "Passkey",
   "passkeys.add": "Add a passkey",
   "passkeys.nameLabel": "Passkey name (optional)",

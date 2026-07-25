@@ -7,6 +7,7 @@ import { addPasskey, listPasskeys, removePasskey, type PasskeyInfo } from '@/lib
 import { PasskeyDuplicateError } from '@/lib/passkey'
 import { ApiError } from '@/lib/api'
 import { settingsErrorKey } from '@/lib/auth-error'
+import { deviceLabel } from '@/lib/ua'
 import { useOnline } from '@/hooks/useOnline'
 import { useT, useLocale } from '@/lib/i18n'
 import { SettingsSection } from './SettingsControls'
@@ -132,13 +133,19 @@ export function PasskeysSection() {
                 )}
               </p>
               <p className="text-xs text-muted-foreground">
-                {t('passkeys.added', {
-                  date: new Date(passkey.created_at).toLocaleDateString(locale, {
+                {(() => {
+                  const date = new Date(passkey.created_at).toLocaleDateString(locale, {
                     day: 'numeric',
                     month: 'short',
                     year: 'numeric',
-                  }),
-                })}
+                  })
+                  // Passkeys enrolled before the server recorded a user agent, and
+                  // agents deviceLabel cannot place, fall back to the date alone.
+                  const device = deviceLabel(passkey.user_agent)
+                  return device
+                    ? t('passkeys.addedFrom', { date, device })
+                    : t('passkeys.added', { date })
+                })()}
               </p>
             </div>
             {!passkey.current && (

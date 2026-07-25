@@ -39,12 +39,17 @@ afterEach(async () => {
  * @param createdAt Registration time, so list ordering can be controlled.
  * @returns Nothing.
  */
-async function insertCredential(id: string, userId = USER, createdAt = Date.now()): Promise<void> {
+async function insertCredential(
+  id: string,
+  userId = USER,
+  createdAt = Date.now(),
+  userAgent: string | null = null,
+): Promise<void> {
   await ctx.db
     .prepare(
-      'INSERT INTO credentials (id, user_id, public_key, counter, created_at, label) VALUES (?, ?, ?, 0, ?, ?)',
+      'INSERT INTO credentials (id, user_id, public_key, counter, created_at, label, user_agent) VALUES (?, ?, ?, 0, ?, ?, ?)',
     )
-    .bind(id, userId, 'pk', createdAt, `label-${id}`)
+    .bind(id, userId, 'pk', createdAt, `label-${id}`, userAgent)
     .run()
 }
 
@@ -72,19 +77,24 @@ async function signIn(credentialId?: string, userId = USER): Promise<string> {
  * @param cookie Session cookie header to authenticate with.
  * @returns The listed credentials.
  */
-async function list(
-  cookie: string,
-): Promise<{ id: string; label: string | null; created_at: number; current: boolean }[]> {
+async function list(cookie: string): Promise<Listed[]> {
   const res = await app.request(
     '/api/auth/credentials',
     { headers: { Origin: TEST_ORIGIN, Cookie: cookie } },
     ctx.env,
   )
   expect(res.status).toBe(200)
-  const body = (await res.json()) as {
-    credentials: { id: string; label: string | null; created_at: number; current: boolean }[]
-  }
+  const body = (await res.json()) as { credentials: Listed[] }
   return body.credentials
+}
+
+/** A credential as the settings endpoint returns it. */
+interface Listed {
+  id: string
+  label: string | null
+  created_at: number
+  user_agent: string | null
+  current: boolean
 }
 
 /**
@@ -134,6 +144,17 @@ describe('passkey list', () => {
     const credentials = await list(cookie)
     expect(credentials.map((c) => c.id)).toEqual(['cred-a'])
     expect(credentials[0].current).toBe(false)
+  })
+
+  it('returns the enrolling device user agent, and null when there was none', async () => {
+    const chrome =
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0 Safari/537.36'
+    await insertCredential('cred-a', USER, 1, chrome)
+    await insertCredential('cred-b', USER, 2)
+    const cookie = await signIn('cred-a')
+
+    const credentials = await list(cookie)
+    expect(credentials.map((c) => c.user_agent)).toEqual([chrome, null])
   })
 
   it('never lists another account credentials', async () => {

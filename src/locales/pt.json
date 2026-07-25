@@ -122,6 +122,7 @@
   "passkeys.title": "Chaves de acesso",
   "passkeys.description": "As chaves de acesso permitem entrar nesta conta sem senha.",
   "passkeys.added": "Adicionada em {date}",
+  "passkeys.addedFrom": "Adicionada em {date} de {device}",
   "passkeys.unnamed": "Chave de acesso",
   "passkeys.add": "Adicionar uma chave de acesso",
   "passkeys.nameLabel": "Nome da chave (opcional)",
