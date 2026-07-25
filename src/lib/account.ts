@@ -17,6 +17,14 @@ export interface PasskeyInfo {
   label: string | null
   /** Epoch ms when the passkey was registered. */
   created_at: number
+  /**
+   * Whether this is the passkey that signed the current session in. Not a claim
+   * that the device still holds it: the session is never re-verified against an
+   * authenticator. The server refuses to remove this one (403), so the UI hides
+   * its remove button rather than offering an action that cannot succeed. False
+   * for every passkey when the session predates the server recording this.
+   */
+  current: boolean
 }
 
 /** An active session as shown in the settings list. */

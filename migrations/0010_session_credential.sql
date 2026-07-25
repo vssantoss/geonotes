@@ -1,0 +1,11 @@
+-- The credential that signed a session in, so the settings passkey list can
+-- badge the passkey in use on this device. Every session is born from a passkey
+-- ceremony (creation, recovery or login), so this is always known for new rows;
+-- sessions predating this migration keep NULL and simply badge nothing until
+-- the user next signs in.
+--
+-- Deliberately NOT a foreign key: deleting a passkey must not cascade into the
+-- sessions it started, since a session stays valid on its own once issued. The
+-- id is only ever compared against the credentials list, so a dangling value
+-- reads as "no badge", which is the correct answer for a deleted passkey.
+ALTER TABLE sessions ADD COLUMN credential_id TEXT;

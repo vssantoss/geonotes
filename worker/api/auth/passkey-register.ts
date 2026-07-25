@@ -82,6 +82,7 @@ export const onRequestPost = route<Env>(async ({ env, request, waitUntil }) => {
   }
 
   // Signs the new (or recovered) account in straight away, on whichever session
-  // transport the caller can use.
-  return issueSessionResponse(env, user.id, request, { ok: true })
+  // transport the caller can use. The credential just enrolled is the one that
+  // authorized this session, so the settings passkey list can badge it.
+  return issueSessionResponse(env, user.id, request, { ok: true }, credential.id)
 })

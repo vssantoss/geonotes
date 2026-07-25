@@ -16,6 +16,11 @@ import { SettingsSection } from './SettingsControls'
  * one (blocked server-side when it is the last passkey). Loads the list on
  * mount and refreshes it after every change.
  *
+ * The passkey that signed this session in is badged and has no remove button,
+ * the same way the current session cannot be revoked from SessionsSection. The
+ * server refuses it too (403), since this list can be stale. Removing it means
+ * signing in with another passkey first.
+ *
  * Every action here needs the server, so offline the controls are disabled and
  * the list load is held back rather than allowed to fail; SettingsScreen already
  * says why once for the whole screen.
@@ -71,7 +76,11 @@ export function PasskeysSection() {
     }
   }
 
-  /** Removes the confirmed passkey, mapping the last-passkey 409 to its message. */
+  /**
+   * Removes the confirmed passkey, naming the two refusals the server can
+   * return: 409 for the account's last passkey, 403 for the one that signed
+   * this session in (reachable if the list went stale under us).
+   */
   const confirmRemove = async () => {
     if (!removeTarget) return
     setBusy(true)
@@ -80,10 +89,12 @@ export function PasskeysSection() {
       await removePasskey(removeTarget.id)
       await reload()
     } catch (err) {
-      const key = settingsErrorKey(
-        err,
-        err instanceof ApiError && err.status === 409 ? 'passkeys.lastError' : 'auth.error.generic',
-      )
+      const status = err instanceof ApiError ? err.status : 0
+      const refusals: Record<number, string> = {
+        409: 'passkeys.lastError',
+        403: 'passkeys.inUseError',
+      }
+      const key = settingsErrorKey(err, refusals[status] ?? 'auth.error.generic')
       setError(key && t(key))
     } finally {
       setRemoveTarget(null)
@@ -105,7 +116,14 @@ export function PasskeysSection() {
           >
             <KeyRound className="size-4 shrink-0 text-primary" aria-hidden />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{passkey.label ?? t('passkeys.unnamed')}</p>
+              <p className="flex items-center gap-2 text-sm font-medium">
+                <span className="truncate">{passkey.label ?? t('passkeys.unnamed')}</span>
+                {passkey.current && (
+                  <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                    {t('passkeys.current')}
+                  </span>
+                )}
+              </p>
               <p className="text-xs text-muted-foreground">
                 {t('passkeys.added', {
                   date: new Date(passkey.created_at).toLocaleDateString(locale, {
@@ -116,16 +134,18 @@ export function PasskeysSection() {
                 })}
               </p>
             </div>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              disabled={blocked}
-              aria-label={t('passkeys.remove')}
-              title={t('passkeys.remove')}
-              onClick={() => setRemoveTarget(passkey)}
-            >
-              <Trash2 className="text-destructive" />
-            </Button>
+            {!passkey.current && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                disabled={blocked}
+                aria-label={t('passkeys.remove')}
+                title={t('passkeys.remove')}
+                onClick={() => setRemoveTarget(passkey)}
+              >
+                <Trash2 className="text-destructive" />
+              </Button>
+            )}
           </li>
         ))}
       </ul>
