@@ -2,11 +2,11 @@
 
 ## Final steps
 
-Everything below this section is done except the items collected here. Phase 1 (toolchain, build, deploy to device) and Phase 2's Fix A/B/C, native passkeys and native bot resistance are all implemented and verified end to end on device; what is left is one release step, one on-device verification, the polish pass, and two things that only become possible once the app is in Play Console.
+Everything below this section is done except the items collected here. Phase 1 (toolchain, build, deploy to device) and Phase 2's Fix A/B/C, native passkeys and native bot resistance are all implemented and verified end to end on device; the branch is merged and live on production. What is left is one on-device verification, the polish pass, and two things that only become possible once the app is in Play Console.
 
 ### Release
 
-- [ ] **Merge `android-version` into `main`.** This is the real blocker and it is bigger than it looks: 28 commits are unmerged, and every worker-side piece of native support (CORS middleware, bearer transport, `expectedOrigins`, Play Integrity verification, `assetlinks.json`, the `ANDROID_PASSKEY_ORIGIN` / `ANDROID_PACKAGE` vars) exists only on this branch. Production is currently running two out-of-band `pnpm run deploy` pushes (`8215deee`, `f7764984`) that bypassed the repo, so **`main`'s source does not match what is live**. Merging is what reconciles them, and since a push to `main` is a production release, treat it as one.
+- [x] **Merge `android-version` into `main`.** Done 2026-07-25 via PR #7 (30 commits, merge commit `4819b31`). This was the real blocker: every worker-side piece of native support (CORS middleware, bearer transport, `expectedOrigins`, Play Integrity verification, `assetlinks.json`, the `ANDROID_PASSKEY_ORIGIN` / `ANDROID_PACKAGE` vars) existed only on that branch, and production was running two out-of-band `pnpm run deploy` pushes (`8215deee`, `f7764984`) that bypassed the repo, so `main`'s source did not match what was live. The merge reconciled them: Cloudflare built from `main` and production now serves the same bundle `pnpm build` emits at `4819b31`, including the three commits the out-of-band deploys predated (location permission, GPS notice layout, icon safe zone). Verified live afterwards: `/.well-known/assetlinks.json` still 200 as `application/json`, a native-origin preflight on `/api/sync` still 204, and a bearer-less native POST returns a readable 401 with `Access-Control-Allow-Origin: https://localhost` (401 not 403, so the request cleared the origin gate and failed only on the session, which is the bearer path intact).
 
 ### On-device verification still owed
 
