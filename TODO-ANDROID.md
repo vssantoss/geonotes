@@ -72,10 +72,10 @@ The strategy: run a single adb server on the Windows host that owns both the emu
 
 ### 1f. Real device
 
-- [ ] Attach the phone to the Windows adb server: USB into Windows, or Wireless debugging paired on Windows
-- [ ] From WSL confirm both phone and emulator show in `adb devices`
-- [ ] Install targeting a specific serial: `adb -s <serial> install -r android/app/build/outputs/apk/debug/app-debug.apk`
-- [ ] Launch and confirm the UI renders
+- [X] Attach the phone to the Windows adb server: USB into Windows, or Wireless debugging paired on Windows
+- [X] From WSL confirm both phone and emulator show in `adb devices`
+- [X] Install targeting a specific serial: `adb -s <serial> install -r android/app/build/outputs/apk/debug/app-debug.apk`
+- [X] Launch and confirm the UI renders
 
 **Phase 1 is done** when the app launches and renders on both the emulator and the device. That confirms the full build-to-device pipeline works and unblocks phase 2.
 
@@ -142,7 +142,7 @@ Scoped 2026-07-22. The WebView cannot run the web WebAuthn ceremony (origin `htt
   - [x] Backend: `email-request` accepts EITHER a Turnstile token (web) OR a valid Play Integrity token (native), dispatching on the token (not a client flag) and only taking the attestation path when the SA key is configured. The per-IP edge rate limit stays the floor.
   - [x] No "skip if native" bypass: absent both tokens, the request falls through to Turnstile (403 in prod); a bad integrity token is rejected. Neither is forgeable into a bypass.
   - [x] DEPLOY: set the Worker secret `PLAY_INTEGRITY_SA_JSON` from `~/dev/geonotes-vshub-b53779f9aea5.json` before/with the push, else native `email-request` falls back to Turnstile (which the app can't solve) and 403s. Confirmed present on `geonotes-worker` via `wrangler secret list` (2026-07-24), so the native e-mail path is no longer secret-blocked. Leave `PLAY_INTEGRITY_STRICT` unset until the app ships from a Play track.
-  - [ ] TEST: on device, create/recover an account (the flow that was Turnstile-blocked) with 1Password as the passkey provider. Sideloaded debug builds report `UNRECOGNIZED_VERSION`, tolerated by the lenient (non-strict) gate; full verdicts need an Internal-testing-track install.
+  - [X] TEST: on device, create/recover an account (the flow that was Turnstile-blocked). Sideloaded debug builds report `UNRECOGNIZED_VERSION`, tolerated by the lenient (non-strict) gate; full verdicts need an Internal-testing-track install.
   - [ ] iOS (later): App Attest (hardware-bound key, assert per request), with DeviceCheck as the lighter-weight fallback.
 
   Reality check (verified 2026-07-20): Turnstile is ALREADY required on `email-request` in production, so this is a functional BLOCKER, not just future hardening. `worker/api/auth/email-request.ts:39` calls `verifyTurnstile`, which throws `403 "turnstile required"` whenever `TURNSTILE_SECRET` is set (`worker/_lib/turnstile.ts:36-40`), and it is set in production. Consequence: once the native app can reach the API (Fix A/B/C), its email sign-in / account-creation flow will 403 until the backend accepts a Play Integrity token as the native alternative on `email-request`. Passkey *login* does not call Turnstile (`passkey-login-options` / `passkey-login`), so a returning passkey user is unaffected; only email-code issuance (new account, email change) is gated. This is why bot resistance cannot simply be deferred to the end for anything involving account creation.
