@@ -51,7 +51,7 @@ const COPY: Record<ExplainablePermission, { title: string; body: string; canAsk:
  *
  * @param permission - which state to explain.
  * @param onAllow - called to raise the system prompt; unused when blocked.
- * @param onDismiss - called when the user declines, presses Escape or taps the backdrop.
+ * @param onDismiss - called when the user declines; the buttons are the only way out.
  * @returns the modal explanation dialog.
  */
 export function LocationPermissionDialog({
@@ -67,7 +67,16 @@ export function LocationPermissionDialog({
   const copy = COPY[permission]
   return (
     <Dialog open onOpenChange={(open) => !open && onDismiss()}>
-      <DialogContent className="max-w-sm rounded-xl" showCloseButton={false}>
+      <DialogContent
+        className="max-w-sm rounded-xl"
+        showCloseButton={false}
+        // The dialog asks one plain question with both answers on screen, so
+        // there is nothing to escape from; taking either button is quicker than
+        // hunting for the backdrop, and a stray tap outside should not count as
+        // an answer.
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+      >
         <DialogTitle className="flex items-center gap-2 text-base leading-snug font-medium">
           <MapPin className="size-5 shrink-0 text-primary" aria-hidden />
           {t(copy.title)}

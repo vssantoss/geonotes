@@ -87,7 +87,7 @@ export function MainScreen({
       </div>
 
       {error && (
-        <Notice>
+        <Notice center>
           {t(geoErrorKey(error))}
           <Button variant="outline" size="xs" onClick={retry}>
             {t('gps.retry')}
