@@ -112,10 +112,17 @@ export function SettingsScreen({ signedIn, onClose }: { signedIn: boolean; onClo
 
         {signedIn && (
           <>
+            {/* Warning-tinted rather than the muted default: it is the reason
+                every control below it is greyed out, so it has to be read before
+                the user starts pressing them. The icon sits beside both lines,
+                giving the second one a hanging indent. */}
             {!online && (
-              <Notice className="mx-0 mt-0">
-                <WifiOff className="size-4 shrink-0" aria-hidden />
-                {t('settings.error.offline')}
+              <Notice className="mx-0 mt-0 items-start border-amber-500/40 bg-amber-500/10 px-3.5 py-3 text-amber-900 dark:text-amber-200/90">
+                <WifiOff className="mt-0.5 size-4 shrink-0" aria-hidden />
+                <div className="flex min-w-0 flex-col gap-0.5">
+                  <p className="font-semibold">{t('settings.error.offlineTitle')}</p>
+                  <p>{t('settings.error.offline')}</p>
+                </div>
               </Notice>
             )}
             <PasskeysSection />
