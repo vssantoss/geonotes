@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { confirmEmailChange, requestEmailChangeCode } from '@/lib/account'
 import { ApiError } from '@/lib/api'
+import { settingsErrorKey } from '@/lib/auth-error'
 import { KV, kvGet } from '@/lib/db'
 import { useT } from '@/lib/i18n'
 import { SettingsSection } from './SettingsControls'
@@ -58,7 +59,7 @@ export function EmailSection() {
       // The server rejects an unchanged or already-used address before sending.
       if (err instanceof ApiError && err.status === 409) {
         setError(t(err.message === 'email unchanged' ? 'email.sameAddress' : 'email.inUse'))
-      } else setError(t('auth.error.generic'))
+      } else setError(t(settingsErrorKey(err)))
     } finally {
       setBusy(false)
     }
@@ -75,7 +76,7 @@ export function EmailSection() {
       if (err instanceof ApiError && err.status === 409) {
         setError(t(err.message === 'email unchanged' ? 'email.sameAddress' : 'email.inUse'))
       } else if (err instanceof ApiError && err.status === 401) setError(t('auth.error.badCode'))
-      else setError(t('auth.error.generic'))
+      else setError(t(settingsErrorKey(err)))
     } finally {
       setBusy(false)
     }

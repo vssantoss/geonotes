@@ -3,6 +3,7 @@ import { Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { deleteAccount } from '@/lib/account'
+import { settingsErrorKey } from '@/lib/auth-error'
 import { useT } from '@/lib/i18n'
 import { SettingsSection } from './SettingsControls'
 
@@ -31,8 +32,8 @@ export function DeleteAccountSection({ onDeleted }: { onDeleted: () => void }) {
       await deleteAccount()
       setConfirming(false)
       onDeleted()
-    } catch {
-      setError(t('auth.error.generic'))
+    } catch (err) {
+      setError(t(settingsErrorKey(err)))
       setBusy(false)
       setConfirming(false)
     }

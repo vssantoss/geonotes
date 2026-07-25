@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { addPasskey, listPasskeys, removePasskey, type PasskeyInfo } from '@/lib/account'
 import { ApiError } from '@/lib/api'
+import { settingsErrorKey } from '@/lib/auth-error'
 import { useT, useLocale } from '@/lib/i18n'
 import { SettingsSection } from './SettingsControls'
 
@@ -25,12 +26,12 @@ export function PasskeysSection() {
   // The passkey pending removal confirmation.
   const [removeTarget, setRemoveTarget] = useState<PasskeyInfo | null>(null)
 
-  /** Loads (or reloads) the passkey list, surfacing a generic error on failure. */
+  /** Loads (or reloads) the passkey list, surfacing the failure reason. */
   const reload = async () => {
     try {
       setPasskeys(await listPasskeys())
-    } catch {
-      setError(t('auth.error.generic'))
+    } catch (err) {
+      setError(t(settingsErrorKey(err)))
     }
   }
 
@@ -48,9 +49,9 @@ export function PasskeysSection() {
       setAddingName(null)
       await reload()
     } catch (err) {
-      // A cancelled/failed browser ceremony and a server rejection both surface
-      // as a generic error; the passkey list is unchanged.
-      if (!(err instanceof DOMException)) setError(t('auth.error.generic'))
+      // A cancelled/failed browser ceremony is silent; a server rejection or a
+      // failed call surfaces. The passkey list is unchanged either way.
+      if (!(err instanceof DOMException)) setError(t(settingsErrorKey(err)))
     } finally {
       setBusy(false)
     }
@@ -66,9 +67,14 @@ export function PasskeysSection() {
       await reload()
     } catch (err) {
       setError(
-        err instanceof ApiError && err.status === 409
-          ? t('passkeys.lastError')
-          : t('auth.error.generic'),
+        t(
+          settingsErrorKey(
+            err,
+            err instanceof ApiError && err.status === 409
+              ? 'passkeys.lastError'
+              : 'auth.error.generic',
+          ),
+        ),
       )
     } finally {
       setRemoveTarget(null)

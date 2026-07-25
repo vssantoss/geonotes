@@ -8,6 +8,7 @@ import {
   revokeSession,
   type SessionInfo,
 } from '@/lib/account'
+import { settingsErrorKey } from '@/lib/auth-error'
 import { deviceLabel } from '@/lib/ua'
 import { useT, useLocale } from '@/lib/i18n'
 import { SettingsSection } from './SettingsControls'
@@ -31,12 +32,12 @@ export function SessionsSection() {
   // Whether the "sign out all others" confirmation is open.
   const [confirmOthers, setConfirmOthers] = useState(false)
 
-  /** Loads (or reloads) the session list, surfacing a generic error on failure. */
+  /** Loads (or reloads) the session list, surfacing the failure reason. */
   const reload = async () => {
     try {
       setSessions(await listSessions())
-    } catch {
-      setError(t('auth.error.generic'))
+    } catch (err) {
+      setError(t(settingsErrorKey(err)))
     }
   }
 
@@ -62,8 +63,8 @@ export function SessionsSection() {
     try {
       await revokeSession(revokeTarget.id)
       await reload()
-    } catch {
-      setError(t('auth.error.generic'))
+    } catch (err) {
+      setError(t(settingsErrorKey(err)))
     } finally {
       setRevokeTarget(null)
       setBusy(false)
@@ -77,8 +78,8 @@ export function SessionsSection() {
     try {
       await revokeOtherSessions()
       await reload()
-    } catch {
-      setError(t('auth.error.generic'))
+    } catch (err) {
+      setError(t(settingsErrorKey(err)))
     } finally {
       setConfirmOthers(false)
       setBusy(false)

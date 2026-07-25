@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, NetworkError, apiFetch } from '../api'
-import { authErrorKey } from '../auth-error'
+import { authErrorKey, settingsErrorKey } from '../auth-error'
 
 // api.ts reaches the native session store on import; neither plugin has a
 // runtime here, and the web path (not native) never calls into them anyway.
@@ -83,5 +83,29 @@ describe('authErrorKey', () => {
 
   it('defaults to the generic message for anything else', () => {
     expect(authErrorKey(new Error('boom'))).toBe('auth.error.generic')
+  })
+})
+
+describe('settingsErrorKey', () => {
+  it('uses wording that fits an action taken while already signed in', () => {
+    // The sign-in copy talks about signing in and about the notes still working
+    // offline, neither of which describes revoking a session.
+    setOnline(false)
+    expect(settingsErrorKey(new NetworkError(new TypeError('Failed to fetch')))).toBe(
+      'settings.error.offline',
+    )
+  })
+
+  it('shares the unreachable message, which is already wording-neutral', () => {
+    setOnline(true)
+    expect(settingsErrorKey(new NetworkError(new TypeError('Failed to fetch')))).toBe(
+      'auth.error.unreachable',
+    )
+  })
+
+  it('passes through the caller fallback for a server answer', () => {
+    expect(settingsErrorKey(new ApiError(409, 'last passkey'), 'passkeys.lastError')).toBe(
+      'passkeys.lastError',
+    )
   })
 })
