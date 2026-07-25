@@ -1,5 +1,7 @@
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, WifiOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Notice } from '@/components/Notice'
+import { useOnline } from '@/hooks/useOnline'
 import { useTheme, type ThemeChoice } from '@/lib/theme'
 import { useLocale } from '@/lib/i18n'
 import { useUnits, type UnitsPref } from '@/lib/units'
@@ -20,11 +22,17 @@ import { DeleteAccountSection } from '@/components/settings/DeleteAccountSection
  * (passkeys, active sessions, e-mail) appear only when signed in. Rendered by
  * App as a full-screen overlay, mirroring the sign-in flow.
  *
+ * Every account section talks to the server and none of them can do anything
+ * offline, so the state is announced once here and each section disables its own
+ * controls, rather than four sections each failing separately into their own
+ * error line. The cosmetic preferences above are device-only and stay usable.
+ *
  * @param signedIn - whether a session is active, gating the account sections.
  * @param onClose - called to leave Settings and return to the previous screen.
  */
 export function SettingsScreen({ signedIn, onClose }: { signedIn: boolean; onClose: () => void }) {
   const t = useT()
+  const online = useOnline()
   const { choice: themeChoice, setChoice: setThemeChoice } = useTheme()
   const { choice: localeChoice, setLocale } = useLocale()
   const { pref: unitsPref, setPref: setUnitsPref } = useUnits()
@@ -104,6 +112,12 @@ export function SettingsScreen({ signedIn, onClose }: { signedIn: boolean; onClo
 
         {signedIn && (
           <>
+            {!online && (
+              <Notice className="mx-0 mt-0">
+                <WifiOff className="size-4 shrink-0" aria-hidden />
+                {t('settings.error.offline')}
+              </Notice>
+            )}
             <PasskeysSection />
             <SessionsSection />
             <EmailSection />

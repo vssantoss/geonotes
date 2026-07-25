@@ -117,7 +117,7 @@
   "settings.units.auto": "Automático",
   "settings.units.imperial": "Milhas",
   "settings.units.metric": "Metros",
-  "settings.error.offline": "Você está sem conexão. Isso exige conexão com a internet.",
+  "settings.error.offline": "Você está sem conexão. As configurações da conta exigem conexão com a internet.",
   "passkeys.title": "Chaves de acesso",
   "passkeys.description": "As chaves de acesso permitem entrar nesta conta sem senha.",
   "passkeys.added": "Adicionada em {date}",

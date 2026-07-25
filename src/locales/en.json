@@ -117,7 +117,7 @@
   "settings.units.auto": "Automatic",
   "settings.units.imperial": "Miles",
   "settings.units.metric": "Meters",
-  "settings.error.offline": "You're offline. This needs an internet connection.",
+  "settings.error.offline": "You're offline. Account settings need an internet connection.",
   "passkeys.title": "Passkeys",
   "passkeys.description": "Passkeys let you sign in on this account without a password.",
   "passkeys.added": "Added {date}",

@@ -87,13 +87,12 @@ describe('authErrorKey', () => {
 })
 
 describe('settingsErrorKey', () => {
-  it('uses wording that fits an action taken while already signed in', () => {
-    // The sign-in copy talks about signing in and about the notes still working
-    // offline, neither of which describes revoking a session.
+  it('stays silent when the device was offline, leaving that to the screen notice', () => {
+    // Settings says it once at the top and disables the controls that need a
+    // connection, so a section repeating it would be the second copy of the
+    // message rather than new information.
     setOnline(false)
-    expect(settingsErrorKey(new NetworkError(new TypeError('Failed to fetch')))).toBe(
-      'settings.error.offline',
-    )
+    expect(settingsErrorKey(new NetworkError(new TypeError('Failed to fetch')))).toBeNull()
   })
 
   it('shares the unreachable message, which is already wording-neutral', () => {
@@ -107,5 +106,9 @@ describe('settingsErrorKey', () => {
     expect(settingsErrorKey(new ApiError(409, 'last passkey'), 'passkeys.lastError')).toBe(
       'passkeys.lastError',
     )
+  })
+
+  it('defaults to the generic message for anything else', () => {
+    expect(settingsErrorKey(new Error('boom'))).toBe('auth.error.generic')
   })
 })

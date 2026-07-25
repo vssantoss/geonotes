@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { confirmEmailChange, requestEmailChangeCode } from '@/lib/account'
 import { ApiError } from '@/lib/api'
 import { settingsErrorKey } from '@/lib/auth-error'
+import { useOnline } from '@/hooks/useOnline'
 import { KV, kvGet } from '@/lib/db'
 import { useT } from '@/lib/i18n'
 import { SettingsSection } from './SettingsControls'
@@ -20,9 +21,14 @@ type Step = 'idle' | 'email' | 'code' | 'done'
  * proves control of it, and on confirmation the change is applied server-side
  * and the local account markers are re-pointed. Shows the current address and,
  * in dev mode, the echoed code so the flow is testable without a real inbox.
+ *
+ * The flow needs the server at both steps, so offline it cannot be started or
+ * advanced; SettingsScreen already says why once for the whole screen. The
+ * current address still shows, since it is read from the local kv store.
  */
 export function EmailSection() {
   const t = useT()
+  const online = useOnline()
   // Live current e-mail so the display updates the instant a change lands in kv.
   const currentEmail = useLiveQuery(() => kvGet(KV.userEmail), [], null)
   const [step, setStep] = useState<Step>('idle')
@@ -59,7 +65,10 @@ export function EmailSection() {
       // The server rejects an unchanged or already-used address before sending.
       if (err instanceof ApiError && err.status === 409) {
         setError(t(err.message === 'email unchanged' ? 'email.sameAddress' : 'email.inUse'))
-      } else setError(t(settingsErrorKey(err)))
+      } else {
+        const key = settingsErrorKey(err)
+        setError(key && t(key))
+      }
     } finally {
       setBusy(false)
     }
@@ -76,11 +85,18 @@ export function EmailSection() {
       if (err instanceof ApiError && err.status === 409) {
         setError(t(err.message === 'email unchanged' ? 'email.sameAddress' : 'email.inUse'))
       } else if (err instanceof ApiError && err.status === 401) setError(t('auth.error.badCode'))
-      else setError(t(settingsErrorKey(err)))
+      else {
+        const key = settingsErrorKey(err)
+        setError(key && t(key))
+      }
     } finally {
       setBusy(false)
     }
   }
+
+  // Gate for every control that hits the server. Cancelling out of the flow is
+  // local-only and stays available.
+  const blocked = busy || !online
 
   return (
     <SettingsSection title={t('email.title')}>
@@ -93,7 +109,7 @@ export function EmailSection() {
       </div>
 
       {step === 'idle' && (
-        <Button variant="outline" size="sm" onClick={() => setStep('email')}>
+        <Button variant="outline" size="sm" disabled={blocked} onClick={() => setStep('email')}>
           {t('email.change')}
         </Button>
       )}
@@ -112,7 +128,7 @@ export function EmailSection() {
                 setNewEmail(e.target.value)
                 if (error) setError(null)
               }}
-              onKeyDown={(e) => e.key === 'Enter' && !busy && newEmail.trim() && void sendCode()}
+              onKeyDown={(e) => e.key === 'Enter' && !blocked && newEmail.trim() && void sendCode()}
               className="bg-card"
             />
           </label>
@@ -126,7 +142,7 @@ export function EmailSection() {
             <Button variant="outline" size="sm" className="ml-auto" disabled={busy} onClick={reset}>
               {t('editor.cancel')}
             </Button>
-            <Button size="sm" disabled={busy || !newEmail.trim()} onClick={() => void sendCode()}>
+            <Button size="sm" disabled={blocked || !newEmail.trim()} onClick={() => void sendCode()}>
               {t('auth.sendCode')}
             </Button>
           </div>
@@ -147,7 +163,7 @@ export function EmailSection() {
                 setCode(e.target.value)
                 if (error) setError(null)
               }}
-              onKeyDown={(e) => e.key === 'Enter' && !busy && code.trim() && void confirm()}
+              onKeyDown={(e) => e.key === 'Enter' && !blocked && code.trim() && void confirm()}
               className="bg-card"
             />
           </label>
@@ -162,7 +178,7 @@ export function EmailSection() {
             <Button variant="outline" size="sm" className="ml-auto" disabled={busy} onClick={reset}>
               {t('editor.cancel')}
             </Button>
-            <Button size="sm" disabled={busy || !code.trim()} onClick={() => void confirm()}>
+            <Button size="sm" disabled={blocked || !code.trim()} onClick={() => void confirm()}>
               {t('email.confirm')}
             </Button>
           </div>

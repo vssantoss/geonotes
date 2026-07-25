@@ -6,6 +6,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { addPasskey, listPasskeys, removePasskey, type PasskeyInfo } from '@/lib/account'
 import { ApiError } from '@/lib/api'
 import { settingsErrorKey } from '@/lib/auth-error'
+import { useOnline } from '@/hooks/useOnline'
 import { useT, useLocale } from '@/lib/i18n'
 import { SettingsSection } from './SettingsControls'
 
@@ -14,9 +15,14 @@ import { SettingsSection } from './SettingsControls'
  * one (a registration ceremony authorized by the current session) and removes
  * one (blocked server-side when it is the last passkey). Loads the list on
  * mount and refreshes it after every change.
+ *
+ * Every action here needs the server, so offline the controls are disabled and
+ * the list load is held back rather than allowed to fail; SettingsScreen already
+ * says why once for the whole screen.
  */
 export function PasskeysSection() {
   const t = useT()
+  const online = useOnline()
   const { locale } = useLocale()
   const [passkeys, setPasskeys] = useState<PasskeyInfo[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -30,15 +36,20 @@ export function PasskeysSection() {
   const reload = async () => {
     try {
       setPasskeys(await listPasskeys())
+      // A successful reload clears whatever the previous attempt complained about.
+      setError(null)
     } catch (err) {
-      setError(t(settingsErrorKey(err)))
+      const key = settingsErrorKey(err)
+      setError(key && t(key))
     }
   }
 
   useEffect(() => {
-    // One-shot load on mount; reload closes over stable setters only.
-    void reload()
-  }, [])
+    // Loads on mount, and again when connectivity comes back so a section opened
+    // offline fills itself in. Offline the call could only fail, so it is skipped.
+    if (online) void reload()
+    // reload closes over stable setters only, so connectivity is the sole trigger.
+  }, [online])
 
   /** Runs the add-passkey ceremony with the optional typed name. */
   const confirmAdd = async () => {
@@ -51,7 +62,10 @@ export function PasskeysSection() {
     } catch (err) {
       // A cancelled/failed browser ceremony is silent; a server rejection or a
       // failed call surfaces. The passkey list is unchanged either way.
-      if (!(err instanceof DOMException)) setError(t(settingsErrorKey(err)))
+      if (!(err instanceof DOMException)) {
+        const key = settingsErrorKey(err)
+        setError(key && t(key))
+      }
     } finally {
       setBusy(false)
     }
@@ -66,21 +80,20 @@ export function PasskeysSection() {
       await removePasskey(removeTarget.id)
       await reload()
     } catch (err) {
-      setError(
-        t(
-          settingsErrorKey(
-            err,
-            err instanceof ApiError && err.status === 409
-              ? 'passkeys.lastError'
-              : 'auth.error.generic',
-          ),
-        ),
+      const key = settingsErrorKey(
+        err,
+        err instanceof ApiError && err.status === 409 ? 'passkeys.lastError' : 'auth.error.generic',
       )
+      setError(key && t(key))
     } finally {
       setRemoveTarget(null)
       setBusy(false)
     }
   }
+
+  // Gate for every control that hits the server. Cancelling the add form is
+  // local-only and stays available.
+  const blocked = busy || !online
 
   return (
     <SettingsSection title={t('passkeys.title')} description={t('passkeys.description')}>
@@ -106,7 +119,7 @@ export function PasskeysSection() {
             <Button
               variant="ghost"
               size="icon-sm"
-              disabled={busy}
+              disabled={blocked}
               aria-label={t('passkeys.remove')}
               title={t('passkeys.remove')}
               onClick={() => setRemoveTarget(passkey)}
@@ -118,7 +131,7 @@ export function PasskeysSection() {
       </ul>
 
       {addingName === null ? (
-        <Button variant="outline" size="sm" disabled={busy} onClick={() => setAddingName('')}>
+        <Button variant="outline" size="sm" disabled={blocked} onClick={() => setAddingName('')}>
           <Plus />
           {t('passkeys.add')}
         </Button>
@@ -131,7 +144,7 @@ export function PasskeysSection() {
               value={addingName}
               placeholder={t('passkeys.namePlaceholder')}
               onChange={(e) => setAddingName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && !busy && void confirmAdd()}
+              onKeyDown={(e) => e.key === 'Enter' && !blocked && void confirmAdd()}
               className="bg-card"
             />
           </label>
@@ -145,7 +158,7 @@ export function PasskeysSection() {
             >
               {t('editor.cancel')}
             </Button>
-            <Button size="sm" disabled={busy} onClick={() => void confirmAdd()}>
+            <Button size="sm" disabled={blocked} onClick={() => void confirmAdd()}>
               {t('passkeys.continue')}
             </Button>
           </div>

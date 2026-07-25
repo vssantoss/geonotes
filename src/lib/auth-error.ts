@@ -27,32 +27,23 @@ import { NetworkError } from './api'
  * @returns the locale key for the message to show.
  */
 export function authErrorKey(err: unknown, fallback = 'auth.error.generic'): string {
-  return connectionKey(err, 'auth.error.offline', fallback)
+  if (!(err instanceof NetworkError)) return fallback
+  return err.offline ? 'auth.error.offline' : 'auth.error.unreachable'
 }
 
 /**
  * The message key for a failed account-settings call (e-mail change, passkeys,
- * sessions, deletion). Same handling as authErrorKey with wording that fits an
- * action taken while already signed in.
+ * sessions, deletion). Same handling as authErrorKey, except that a device known
+ * to be offline gets no message at all: Settings announces that once at the top
+ * of the screen and disables the controls that need a connection, so a section
+ * repeating it is the noise that notice exists to replace. Only a request that
+ * was already in flight when the connection dropped can land here.
  *
  * @param err - the error thrown by the failed call.
  * @param fallback - locale key for anything that is not a connection failure.
- * @returns the locale key for the message to show.
+ * @returns the locale key for the message to show, or null to show none.
  */
-export function settingsErrorKey(err: unknown, fallback = 'auth.error.generic'): string {
-  return connectionKey(err, 'settings.error.offline', fallback)
-}
-
-/**
- * Shared mapping: a connection failure picks between the caller's offline
- * wording and the unreachable one, anything else keeps the caller's fallback.
- *
- * @param err - the error thrown by the failed call.
- * @param offline - locale key for a device that knows it has no connection.
- * @param fallback - locale key for a failure the server actually answered.
- * @returns the locale key for the message to show.
- */
-function connectionKey(err: unknown, offline: string, fallback: string): string {
+export function settingsErrorKey(err: unknown, fallback = 'auth.error.generic'): string | null {
   if (!(err instanceof NetworkError)) return fallback
-  return err.offline ? offline : 'auth.error.unreachable'
+  return err.offline ? null : 'auth.error.unreachable'
 }
