@@ -6,7 +6,9 @@
 // NOTE: after `capacitor-assets generate --android`, the generated
 // mipmap-anydpi-v26/ic_launcher*.xml must be hand-edited back to the no-inset
 // form (the tool insets both layers, which shrinks the solid red background into
-// a 66.6% square). Do not re-run the tool without redoing that.
+// a 66.6% square). Do not re-run the tool without redoing that. Changing the
+// adaptive foreground alone does not need the tool at all: this script writes
+// the mipmap PNGs for that layer itself, at the end.
 import sharp from 'sharp'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -54,3 +56,23 @@ for (const name of ['splash.png', 'splash-dark.png']) {
 }
 
 console.log('wrote assets/{icon-foreground,icon-background,icon-only,splash,splash-dark}.png')
+
+// The adaptive foreground straight into the Android project. capacitor-assets
+// emits this layer at the legacy 48dp launcher sizes, but an adaptive layer is
+// a 108dp canvas, so those get upscaled 2.25x and go soft. Writing 108dp at
+// each density is both sharper and one less reason to re-run the tool.
+const DENSITIES = { ldpi: 0.75, mdpi: 1, hdpi: 1.5, xhdpi: 2, xxhdpi: 3, xxxhdpi: 4 }
+const resDir = path.join(root, 'android', 'app', 'src', 'main', 'res')
+const foregroundSvg = path.join(assetsDir, 'icon-foreground.svg')
+
+for (const [density, factor] of Object.entries(DENSITIES)) {
+  const px = Math.round(108 * factor)
+  const dir = path.join(resDir, `mipmap-${density}`)
+  mkdirSync(dir, { recursive: true })
+  await sharp(foregroundSvg, { density: Math.round(96 * factor * 4) })
+    .resize(px, px, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .png()
+    .toFile(path.join(dir, 'ic_launcher_foreground.png'))
+}
+
+console.log(`wrote ic_launcher_foreground.png into ${Object.keys(DENSITIES).length} mipmap dirs`)
