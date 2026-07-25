@@ -1,4 +1,5 @@
-import { HttpError, readBearerToken } from './http'
+import { HttpError, json, readBearerToken } from './http'
+import { isNativeOrigin } from './cors'
 import { randomHex, sha256Hex } from './crypto'
 import type { Env } from './env'
 
@@ -66,6 +67,36 @@ export async function createSession(
   statements.push(insert)
   await env.DB.batch(statements)
   return { token, cookie: buildSessionCookie(token, SESSION_TTL_MS / 1000) }
+}
+
+/**
+ * Issues a session for a user and builds the login response that carries it.
+ *
+ * Both transports are decided here, once, because they are a single security
+ * rule rather than a per-endpoint detail: the cookie always goes out, while the
+ * raw token is disclosed in the body only to a trusted native origin, which
+ * needs it for the bearer transport. A web response must never carry it, or the
+ * session stops being HttpOnly and comes within reach of page script. Every
+ * endpoint that signs a user in goes through this, so neither half can be
+ * forgotten by the next one.
+ *
+ * @param env - function environment.
+ * @param userId - the user being signed in.
+ * @param request - the login request, used to rotate the old session and to
+ *          identify a native caller.
+ * @param body - endpoint-specific response fields (the token is merged in).
+ * @returns the JSON response, with the session cookie attached.
+ */
+export async function issueSessionResponse(
+  env: Env,
+  userId: string,
+  request: Request,
+  body: Record<string, unknown>,
+): Promise<Response> {
+  const { token, cookie } = await createSession(env, userId, request)
+  const response = json({ ...body, ...(isNativeOrigin(request) ? { token } : {}) })
+  response.headers.append('Set-Cookie', cookie)
+  return response
 }
 
 /**

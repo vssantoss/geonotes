@@ -6,11 +6,10 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
-import com.google.android.gms.tasks.Task;
+import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.play.core.integrity.IntegrityManagerFactory;
 import com.google.android.play.core.integrity.StandardIntegrityManager;
 import com.google.android.play.core.integrity.StandardIntegrityManager.PrepareIntegrityTokenRequest;
-import com.google.android.play.core.integrity.StandardIntegrityManager.StandardIntegrityToken;
 import com.google.android.play.core.integrity.StandardIntegrityManager.StandardIntegrityTokenProvider;
 import com.google.android.play.core.integrity.StandardIntegrityManager.StandardIntegrityTokenRequest;
 
@@ -62,12 +61,7 @@ public class PlayIntegrityPlugin extends Plugin {
             call.resolve();
             return;
         }
-        prepareProvider(projectNumber)
-            .addOnSuccessListener(provider -> {
-                cacheProvider(provider, projectNumber);
-                call.resolve();
-            })
-            .addOnFailureListener(e -> call.reject("integrity prepare failed: " + e.getMessage()));
+        prepareAndCache(projectNumber, call, provider -> call.resolve());
     }
 
     /**
@@ -123,29 +117,31 @@ public class PlayIntegrityPlugin extends Plugin {
     }
 
     /**
-     * Starts the prepare (warm-up) step for a project number. This is the slow
-     * half of the API, so both callers go through it rather than duplicating it.
+     * Runs the prepare (warm-up) step, caches the provider it yields and hands it
+     * to the caller. This is the slow half of the API and the only place it is
+     * started, so warming up and preparing-before-a-request cannot drift apart in
+     * what they cache or how they report a failure.
      *
      * @param projectNumber the linked Cloud project number.
-     * @return the pending prepare task, to attach listeners to.
+     * @param call          the Capacitor call, rejected when preparing fails.
+     * @param onReady       what to do with the prepared provider.
      */
-    private Task<StandardIntegrityTokenProvider> prepareProvider(long projectNumber) {
+    private void prepareAndCache(
+        long projectNumber,
+        PluginCall call,
+        OnSuccessListener<StandardIntegrityTokenProvider> onReady
+    ) {
         StandardIntegrityManager manager = IntegrityManagerFactory.createStandard(getContext());
-        return manager.prepareIntegrityToken(
-            PrepareIntegrityTokenRequest.builder().setCloudProjectNumber(projectNumber).build()
-        );
-    }
-
-    /**
-     * Caches a freshly prepared provider together with the project number it was
-     * prepared for.
-     *
-     * @param provider      the prepared token provider.
-     * @param projectNumber the project number it belongs to.
-     */
-    private void cacheProvider(StandardIntegrityTokenProvider provider, long projectNumber) {
-        tokenProvider = provider;
-        tokenProviderProjectNumber = projectNumber;
+        manager
+            .prepareIntegrityToken(
+                PrepareIntegrityTokenRequest.builder().setCloudProjectNumber(projectNumber).build()
+            )
+            .addOnSuccessListener(provider -> {
+                tokenProvider = provider;
+                tokenProviderProjectNumber = projectNumber;
+                onReady.onSuccess(provider);
+            })
+            .addOnFailureListener(e -> call.reject("integrity prepare failed: " + e.getMessage()));
     }
 
     /**
@@ -157,14 +153,11 @@ public class PlayIntegrityPlugin extends Plugin {
      * @param call          the Capacitor call to resolve or reject.
      */
     private void prepareThenRequest(long projectNumber, String requestHash, PluginCall call) {
-        prepareProvider(projectNumber)
-            .addOnSuccessListener(provider -> {
-                cacheProvider(provider, projectNumber);
-                // Already prepared as freshly as we can, so a failure here is real:
-                // no further re-prepare.
-                requestWithProvider(provider, projectNumber, requestHash, call, false);
-            })
-            .addOnFailureListener(e -> call.reject("integrity prepare failed: " + e.getMessage()));
+        // Already prepared as freshly as we can, so a request failure here is real:
+        // no further re-prepare.
+        prepareAndCache(projectNumber, call, provider ->
+            requestWithProvider(provider, projectNumber, requestHash, call, false)
+        );
     }
 
     /**

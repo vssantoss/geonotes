@@ -48,14 +48,22 @@ async function signIn(userId: string): Promise<string> {
  *
  * @param body Arbitrary JSON body, so invalid input can be exercised too.
  * @param as Cookie header to authenticate with; defaults to USER's session.
+ *   Ignored when `native` supplies a bearer token instead.
+ * @param native Native-client transport: posts from the Capacitor webview origin
+ *   with an Authorization bearer and no cookie, the way the app does.
  * @returns The router's response.
  */
-async function post(body: unknown, as: string | null = cookie): Promise<Response> {
+async function post(
+  body: unknown,
+  as: string | null = cookie,
+  native?: { origin: string; token: string },
+): Promise<Response> {
   const headers: Record<string, string> = {
-    Origin: TEST_ORIGIN,
+    Origin: native?.origin ?? TEST_ORIGIN,
     'Content-Type': 'application/json',
   }
-  if (as) headers.Cookie = as
+  if (native) headers.Authorization = `Bearer ${native.token}`
+  else if (as) headers.Cookie = as
   return app.request('/api/sync', { method: 'POST', headers, body: JSON.stringify(body) }, ctx.env)
 }
 
@@ -278,19 +286,7 @@ describe('native bearer authentication', () => {
    * @returns The router's response.
    */
   async function postAsNative(token: string, body: unknown): Promise<Response> {
-    return app.request(
-      '/api/sync',
-      {
-        method: 'POST',
-        headers: {
-          Origin: ANDROID_ORIGIN,
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-      },
-      ctx.env,
-    )
+    return post(body, null, { origin: ANDROID_ORIGIN, token })
   }
 
   it('authenticates a native cross-origin POST that carries no cookie', async () => {

@@ -12,6 +12,18 @@ const SCRIPT_SRC = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render
  */
 export const TURNSTILE_SITEKEY = (import.meta.env.VITE_TURNSTILE_SITEKEY as string | undefined) ?? ''
 
+/**
+ * Whether a Turnstile token is part of the flow at all. False without a sitekey
+ * (local dev, or before the widget is provisioned) and false on native: the
+ * widget's postMessage handshake breaks in the app's https://localhost webview,
+ * so the native build proves itself with Play Integrity instead.
+ *
+ * This module owns the answer so the widget's effect, its render and the caller
+ * that gates its send button on a token cannot disagree: a caller that required a
+ * token the widget never renders would disable that button forever.
+ */
+export const TURNSTILE_REQUIRED = TURNSTILE_SITEKEY !== '' && !Capacitor.isNativePlatform()
+
 /** The subset of the Turnstile JS API this component uses. */
 interface TurnstileApi {
   render: (
@@ -89,9 +101,7 @@ export function TurnstileWidget({
   // is stable, so this runs once per mounted instance.
   useEffect(() => {
     const container = containerRef.current
-    // Never render on native: the widget's postMessage handshake breaks in the
-    // app's https://localhost webview, and native uses Play Integrity instead.
-    if (!TURNSTILE_SITEKEY || Capacitor.isNativePlatform() || !container) return
+    if (!TURNSTILE_REQUIRED || !container) return
     let cancelled = false
     loadTurnstile()
       .then((turnstile) => {
@@ -127,6 +137,6 @@ export function TurnstileWidget({
     }
   }, [resetSignal, onToken])
 
-  if (!TURNSTILE_SITEKEY || Capacitor.isNativePlatform()) return null
+  if (!TURNSTILE_REQUIRED) return null
   return <div ref={containerRef} className="flex justify-center" />
 }

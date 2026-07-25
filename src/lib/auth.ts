@@ -7,6 +7,7 @@ import { passkeyCreate, passkeyGet } from './passkey'
 import { apiFetch } from './api'
 import { clearSessionToken, setSessionToken } from './native-session'
 import { db, KV, kvGet, kvSet } from './db'
+import { sha256Hex } from './hash'
 import { syncNow, wipeLocalAccountData } from './sync'
 
 /**
@@ -229,11 +230,7 @@ export async function hasUnsyncedNotes(): Promise<boolean> {
  * @returns a hex-encoded SHA-256 digest.
  */
 export async function hashAccount(email: string): Promise<string> {
-  const data = new TextEncoder().encode(email.trim().toLowerCase())
-  const digest = await crypto.subtle.digest('SHA-256', data)
-  return Array.from(new Uint8Array(digest))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
+  return sha256Hex(email.trim().toLowerCase())
 }
 
 /**
@@ -251,18 +248,17 @@ export async function signOut(keepNotes: boolean): Promise<void> {
   await syncNow()
   // Best-effort revocation; local sign-out proceeds even when offline.
   await apiFetch('/api/auth/logout', {}).catch(() => {})
-  // Drop the native bearer after the revocation request (no-op on web). Done for
-  // both branches: once signed out, apiFetch must stop sending the dead token.
-  await clearSessionToken()
   if (!keepNotes) {
     // Same wipe a remote revocation applies: notes, outbox and every account
-    // marker removed together.
+    // marker removed together, including the native bearer.
     await wipeLocalAccountData()
     return
   }
   // Keeping the notes: only drop the account link and the account-scoped sync
   // cursor, so a later sign-in reconciles from scratch while the notes stay
-  // available offline.
+  // available offline. The native bearer still has to go, since apiFetch must
+  // stop sending the token the revocation above just killed (no-op on web).
+  await clearSessionToken()
   await db.transaction('rw', db.kv, async () => {
     await kvSet(KV.userEmail, null)
     await kvSet(KV.syncCursor, null)

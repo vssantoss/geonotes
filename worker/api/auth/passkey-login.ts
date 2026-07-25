@@ -1,9 +1,8 @@
 import { verifyAuthenticationResponse } from '@simplewebauthn/server'
 import { isoBase64URL } from '@simplewebauthn/server/helpers'
 import type { AuthenticationResponseJSON } from '@simplewebauthn/server'
-import { json, HttpError, route } from '../../_lib/http'
-import { createSession } from '../../_lib/session'
-import { isNativeOrigin } from '../../_lib/cors'
+import { HttpError, route } from '../../_lib/http'
+import { issueSessionResponse } from '../../_lib/session'
 import { consumeChallenge, expectedOrigins, PASSKEY_LOGIN_SUBJECT } from '../../_lib/challenge'
 import { parseTransports } from './passkey-register-options'
 import type { Env } from '../../_lib/env'
@@ -61,12 +60,7 @@ export const onRequestPost = route<Env>(async ({ env, request }) => {
     .bind(verification.authenticationInfo.newCounter, cred.id)
     .run()
 
-  // The cookie carries the session for the web; native clients cannot use a
-  // cross-origin cookie, so the raw token is also returned in the body for them
-  // to store and send as a bearer. The token is withheld from web responses so
-  // it stays HttpOnly and out of reach of page script.
-  const { token, cookie } = await createSession(env, cred.user_id, request)
-  const response = json({ email: cred.email, ...(isNativeOrigin(request) ? { token } : {}) })
-  response.headers.append('Set-Cookie', cookie)
-  return response
+  // Returns the account e-mail plus whichever session transport the caller can
+  // use; issueSessionResponse owns that split.
+  return issueSessionResponse(env, cred.user_id, request, { email: cred.email })
 })

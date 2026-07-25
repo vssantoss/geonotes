@@ -1,4 +1,4 @@
-import { hmacSign, timingSafeEqual, toBase64Url } from './crypto'
+import { fromBase64, hmacSign, timingSafeEqual, toBase64Url } from './crypto'
 import { HttpError } from './http'
 import type { Env } from './env'
 
@@ -47,9 +47,7 @@ export async function verifyEnrollToken(env: Env, token: string): Promise<string
     throw new HttpError(401, 'bad enroll token')
   }
   const parsed = JSON.parse(
-    new TextDecoder().decode(
-      Uint8Array.from(atob(payload.replaceAll('-', '+').replaceAll('_', '/')), (c) => c.charCodeAt(0)),
-    ),
+    new TextDecoder().decode(fromBase64(payload.replaceAll('-', '+').replaceAll('_', '/'))),
   ) as { email: string; exp: number }
   if (parsed.exp < Date.now()) throw new HttpError(401, 'enroll token expired')
   return parsed.email

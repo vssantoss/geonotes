@@ -28,4 +28,18 @@ describe('expectedOrigins', () => {
     // the native assertion carries the apk-key-hash origin instead of https.
     expect(expectedOrigins(env(ANDROID))).toEqual([ORIGIN, ANDROID])
   })
+
+  it('accepts every Android origin in a comma-separated list', () => {
+    // A debug APK and the Play App Signing build hash differently, so both signing
+    // certs have to verify at once while a release rolls out.
+    const play = 'android:apk-key-hash:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+    expect(expectedOrigins(env(`${ANDROID}, ${play}`))).toEqual([ORIGIN, ANDROID, play])
+  })
+
+  it('ignores an empty or blank Android origin', () => {
+    // An unset var deploys as the empty string, which must not widen the
+    // allowlist with a '' entry that no assertion could legitimately carry.
+    expect(expectedOrigins(env(''))).toEqual([ORIGIN])
+    expect(expectedOrigins(env(' , '))).toEqual([ORIGIN])
+  })
 })

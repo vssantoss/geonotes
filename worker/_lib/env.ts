@@ -22,15 +22,27 @@ export type Env = {
   /** Full origin the app is served from, for WebAuthn verification. */
   ORIGIN: string
   /**
-   * The Android Credential Manager assertion origin, of the form
-   * `android:apk-key-hash:<base64url(SHA-256(signing cert DER))>`. Unlike the web
-   * ceremony, a native passkey assertion carries this instead of an https origin,
-   * so WebAuthn verification must accept it alongside ORIGIN. It is derived from
-   * whichever cert signs the installed APK (debug vs Play App Signing differ), so
-   * it lives in config rather than being hardcoded. Absent off Android builds and
-   * in tests, where only the web origin is expected.
+   * The Android Credential Manager assertion origins, comma-separated, each of
+   * the form `android:apk-key-hash:<base64url(SHA-256(signing cert DER))>`.
+   * Unlike the web ceremony, a native passkey assertion carries one of these
+   * instead of an https origin, so WebAuthn verification must accept them
+   * alongside ORIGIN. Each is derived from a cert that signs an installed APK,
+   * and a debug build and a Play App Signing build differ, so this is a list and
+   * lives in config rather than being hardcoded. Absent off Android builds and in
+   * tests, where only the web origin is expected.
    */
   ANDROID_PASSKEY_ORIGIN?: string
+  /**
+   * The Android application id whose Play Integrity tokens are accepted, and the
+   * package the decode call is made against. Must match the installed APK's
+   * `applicationId` (android/app/build.gradle), capacitor.config.ts `appId` and
+   * the package registered on the linked Cloud project. A token whose decoded
+   * request package differs is rejected, so a token minted for another app can
+   * never authorize a GeoNotes e-mail request. Config rather than a constant for
+   * the same reason RP_ID and ORIGIN are: a rename or a second flavour is then a
+   * var change, not a Worker source edit.
+   */
+  ANDROID_PACKAGE?: string
   /** Secret for HMAC-signing enroll tokens (set via `wrangler secret put AUTH_SECRET`). */
   AUTH_SECRET: string
   /**

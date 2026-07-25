@@ -158,6 +158,17 @@ describe('when configured', () => {
     })
   })
 
+  it('honours a configured ANDROID_PACKAGE over the built-in default', async () => {
+    // The expected package id lives in wrangler.toml so it can follow the APK's
+    // applicationId without a code change. This token would fail against the
+    // built-in default, so accepting it proves the var is what is checked.
+    stubGoogle(decodeBody({ requestPackageName: 'app.vshub.gnotes.beta' }))
+    const { verifyPlayIntegrity } = await load()
+    const env = { ...envWith(true), ANDROID_PACKAGE: 'app.vshub.gnotes.beta' } as Env
+
+    await expect(verifyPlayIntegrity(env, 'token', HASH)).resolves.toBeUndefined()
+  })
+
   it('rejects a token bound to a different request', async () => {
     stubGoogle(decodeBody({ requestHash: 'b'.repeat(64) }))
     const { verifyPlayIntegrity } = await load()

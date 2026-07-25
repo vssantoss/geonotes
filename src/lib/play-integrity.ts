@@ -1,4 +1,5 @@
 import { Capacitor, registerPlugin } from '@capacitor/core'
+import { sha256Hex } from './hash'
 
 /**
  * The native PlayIntegrity plugin (implemented in
@@ -53,27 +54,32 @@ export async function warmUpPlayIntegrity(): Promise<void> {
 
 /**
  * Obtains a Play Integrity token for an e-mail request on native Android, in
- * place of the Turnstile widget the web build uses. The token is bound to the
- * request via `requestHash` (sha256 of the e-mail), which the server re-derives
- * and matches so a token cannot be replayed against a different address.
+ * place of the Turnstile widget the web build uses.
+ *
+ * The token is bound to the address by a request hash this module derives
+ * itself, so the wire contract lives in one place: it must stay
+ * `sha256(email.trim().toLowerCase())` hex, which is what the Worker re-derives
+ * as `sha256Hex(normalizeEmail(email))` in api/auth/email-request.ts before
+ * matching. Deriving it here rather than at the call site keeps it from being
+ * accidentally satisfied by a local-only helper that is free to change.
  *
  * Returns null off native, or when no project number was configured at build
- * time. It never throws: attestation is best-effort at this layer, and a null
- * simply means the request is sent without a token (the server then decides
- * whether to allow it). A native build with attestation configured server-side
- * will be rejected if this returns null, which is the intended fail-closed
- * behaviour rather than a silent bypass.
+ * time, so callers need no platform check of their own. It never throws:
+ * attestation is best-effort at this layer, and a null simply means the request
+ * is sent without a token (the server then decides whether to allow it). A
+ * native build with attestation configured server-side will be rejected if this
+ * returns null, which is the intended fail-closed behaviour rather than a silent
+ * bypass.
  *
- * @param requestHash - hex sha256 of the normalized e-mail, binding the token to
- *          this request.
+ * @param email - the address the code is being requested for.
  * @returns the integrity token, or null when unavailable.
  */
-export async function getPlayIntegrityToken(requestHash: string): Promise<string | null> {
+export async function getPlayIntegrityToken(email: string): Promise<string | null> {
   if (!Capacitor.isNativePlatform() || !PROJECT_NUMBER) return null
   try {
     const { token } = await PlayIntegrity.requestToken({
       projectNumber: PROJECT_NUMBER,
-      requestHash,
+      requestHash: await sha256Hex(email.trim().toLowerCase()),
     })
     return token || null
   } catch {
