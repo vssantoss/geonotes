@@ -9,6 +9,7 @@ import { Capacitor, registerPlugin } from '@capacitor/core'
  */
 interface PlayIntegrityPlugin {
   requestToken(options: { projectNumber: string; requestHash: string }): Promise<{ token: string }>
+  warmUp(options: { projectNumber: string }): Promise<void>
 }
 
 const PlayIntegrity = registerPlugin<PlayIntegrityPlugin>('PlayIntegrity')
@@ -21,6 +22,34 @@ const PlayIntegrity = registerPlugin<PlayIntegrityPlugin>('PlayIntegrity')
  */
 const PROJECT_NUMBER =
   (import.meta.env.VITE_PLAY_INTEGRITY_PROJECT_NUMBER as string | undefined) ?? ''
+
+/**
+ * Prepares the integrity token provider ahead of time, at app start.
+ *
+ * The Standard Integrity API splits into a slow prepare and a fast request:
+ * measured on the dev emulator, preparing took 864ms and issuing a token from a
+ * prepared provider took 9ms. Left to `getPlayIntegrityToken`, the prepare runs
+ * lazily and its 864ms lands between the user tapping "send code" and the
+ * request going out. Doing it at start moves it off that path. Preparing costs
+ * no token quota, so the only cost is a background bind to the Play Store
+ * service on app start.
+ *
+ * Fire and forget: it never throws, and `getPlayIntegrityToken` still prepares
+ * on its own if this failed or never ran. No-op off native or with no project
+ * number configured, exactly like the token request.
+ *
+ * @returns a promise that settles once the provider is warm, or immediately when
+ *          there is nothing to warm up.
+ */
+export async function warmUpPlayIntegrity(): Promise<void> {
+  if (!Capacitor.isNativePlatform() || !PROJECT_NUMBER) return
+  try {
+    await PlayIntegrity.warmUp({ projectNumber: PROJECT_NUMBER })
+  } catch {
+    // Best effort. A failure here only means the first token request pays the
+    // prepare it would have paid anyway.
+  }
+}
 
 /**
  * Obtains a Play Integrity token for an e-mail request on native Android, in

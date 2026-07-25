@@ -6,6 +6,7 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
+import com.google.android.gms.tasks.Task;
 import com.google.android.play.core.integrity.IntegrityManagerFactory;
 import com.google.android.play.core.integrity.StandardIntegrityManager;
 import com.google.android.play.core.integrity.StandardIntegrityManager.PrepareIntegrityTokenRequest;
@@ -22,6 +23,12 @@ import com.google.android.play.core.integrity.StandardIntegrityManager.StandardI
  * The JS side (src/lib/play-integrity.ts) calls requestToken with the linked
  * Cloud project number and a request hash (sha256 of the e-mail); this returns an
  * integrity token that the Worker decodes and verifies against Google.
+ *
+ * The two steps have very different costs: preparing a token provider took 864ms
+ * on the dev emulator while issuing a token from a prepared one took 9ms. So the
+ * JS side calls warmUp at app start and the prepare is over long before the user
+ * asks for an e-mail code. Preparing binds to the Play Store service and consumes
+ * no token quota, which is why doing it ahead of time is Google's guidance.
  */
 @CapacitorPlugin(name = "PlayIntegrity")
 public class PlayIntegrityPlugin extends Plugin {
@@ -38,6 +45,32 @@ public class PlayIntegrityPlugin extends Plugin {
     private long tokenProviderProjectNumber;
 
     /**
+     * Prepares and caches a token provider ahead of any token request, so the
+     * expensive step does not land on the user's tap. Safe to call repeatedly: a
+     * provider already cached for this project number is kept.
+     *
+     * @param call Capacitor call carrying "projectNumber". Resolves once a provider
+     *             is cached, or rejects if preparing failed. Callers treat it as
+     *             advisory; requestToken prepares on its own if this never ran.
+     */
+    @PluginMethod
+    public void warmUp(PluginCall call) {
+        Long projectNumber = parseProjectNumber(call);
+        if (projectNumber == null) return;
+
+        if (tokenProvider != null && tokenProviderProjectNumber == projectNumber) {
+            call.resolve();
+            return;
+        }
+        prepareProvider(projectNumber)
+            .addOnSuccessListener(provider -> {
+                cacheProvider(provider, projectNumber);
+                call.resolve();
+            })
+            .addOnFailureListener(e -> call.reject("integrity prepare failed: " + e.getMessage()));
+    }
+
+    /**
      * Requests a Play Integrity token bound to a request hash.
      *
      * @param call Capacitor call carrying "projectNumber" (the linked Cloud project
@@ -47,19 +80,14 @@ public class PlayIntegrityPlugin extends Plugin {
      */
     @PluginMethod
     public void requestToken(PluginCall call) {
-        String projectNumberStr = call.getString("projectNumber");
         String requestHash = call.getString("requestHash");
-        if (projectNumberStr == null || requestHash == null) {
-            call.reject("projectNumber and requestHash are required");
+        if (requestHash == null) {
+            call.reject("requestHash is required");
             return;
         }
-        long projectNumber;
-        try {
-            projectNumber = Long.parseLong(projectNumberStr);
-        } catch (NumberFormatException e) {
-            call.reject("projectNumber must be a number");
-            return;
-        }
+        Long projectNumberBoxed = parseProjectNumber(call);
+        if (projectNumberBoxed == null) return;
+        long projectNumber = projectNumberBoxed;
 
         // Reuse a warmed-up provider when we already have one for this project;
         // otherwise prepare it first, then issue the token request. A cached
@@ -74,6 +102,53 @@ public class PlayIntegrityPlugin extends Plugin {
     }
 
     /**
+     * Reads and validates the "projectNumber" argument, rejecting the call when it
+     * is missing or not a number.
+     *
+     * @param call the Capacitor call to read from and reject on bad input.
+     * @return the project number, or null when the call was rejected.
+     */
+    private Long parseProjectNumber(PluginCall call) {
+        String value = call.getString("projectNumber");
+        if (value == null) {
+            call.reject("projectNumber is required");
+            return null;
+        }
+        try {
+            return Long.parseLong(value);
+        } catch (NumberFormatException e) {
+            call.reject("projectNumber must be a number");
+            return null;
+        }
+    }
+
+    /**
+     * Starts the prepare (warm-up) step for a project number. This is the slow
+     * half of the API, so both callers go through it rather than duplicating it.
+     *
+     * @param projectNumber the linked Cloud project number.
+     * @return the pending prepare task, to attach listeners to.
+     */
+    private Task<StandardIntegrityTokenProvider> prepareProvider(long projectNumber) {
+        StandardIntegrityManager manager = IntegrityManagerFactory.createStandard(getContext());
+        return manager.prepareIntegrityToken(
+            PrepareIntegrityTokenRequest.builder().setCloudProjectNumber(projectNumber).build()
+        );
+    }
+
+    /**
+     * Caches a freshly prepared provider together with the project number it was
+     * prepared for.
+     *
+     * @param provider      the prepared token provider.
+     * @param projectNumber the project number it belongs to.
+     */
+    private void cacheProvider(StandardIntegrityTokenProvider provider, long projectNumber) {
+        tokenProvider = provider;
+        tokenProviderProjectNumber = projectNumber;
+    }
+
+    /**
      * Warms up a token provider for the given project number, caches it, then
      * issues the token request.
      *
@@ -82,16 +157,9 @@ public class PlayIntegrityPlugin extends Plugin {
      * @param call          the Capacitor call to resolve or reject.
      */
     private void prepareThenRequest(long projectNumber, String requestHash, PluginCall call) {
-        StandardIntegrityManager manager = IntegrityManagerFactory.createStandard(getContext());
-        manager
-            .prepareIntegrityToken(
-                PrepareIntegrityTokenRequest.builder()
-                    .setCloudProjectNumber(projectNumber)
-                    .build()
-            )
+        prepareProvider(projectNumber)
             .addOnSuccessListener(provider -> {
-                tokenProvider = provider;
-                tokenProviderProjectNumber = projectNumber;
+                cacheProvider(provider, projectNumber);
                 // Already prepared as freshly as we can, so a failure here is real:
                 // no further re-prepare.
                 requestWithProvider(provider, projectNumber, requestHash, call, false);
