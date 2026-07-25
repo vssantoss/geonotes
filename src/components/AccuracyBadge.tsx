@@ -2,7 +2,7 @@ import { LocateFixed, LocateOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useT } from '../lib/i18n'
 import { useUnits } from '../lib/units'
-import { formatDistance, type GeoFix } from '../lib/geo'
+import { formatDistance, geoErrorKey, type GeoError, type GeoFix } from '../lib/geo'
 
 /**
  * Compact GPS instrument chip, docked next to the + button. Shows a pulsing
@@ -26,7 +26,7 @@ export function AccuracyBadge({
   fix: GeoFix | null
   location: GeoFix | null
   locked: boolean
-  error: 'denied' | 'unavailable' | 'timeout' | null
+  error: GeoError | null
 }) {
   const t = useT()
   const { units } = useUnits()
@@ -41,7 +41,7 @@ export function AccuracyBadge({
     return (
       <span
         className={cn(base, 'border-destructive/40 bg-destructive/10 text-destructive')}
-        title={t(error === 'denied' ? 'gps.denied' : error === 'timeout' ? 'gps.timeout' : 'gps.unavailable')}
+        title={t(geoErrorKey(error))}
         aria-label={t('gps.noFix')}
       >
         <LocateOff className="size-3.5" aria-hidden />

@@ -2,6 +2,12 @@
 // All browser geolocation access goes through this module so it can later be
 // swapped for @capacitor/geolocation without touching the rest of the app.
 
+import { Capacitor } from '@capacitor/core'
+
+/** Why the app has no usable location: refused, allowed but only approximately,
+    unobtainable, or not precise enough within the acquisition window. */
+export type GeoError = 'denied' | 'imprecise' | 'unavailable' | 'timeout'
+
 /** A GPS fix in the shape the app uses everywhere. */
 export interface GeoFix {
   lat: number
@@ -52,6 +58,26 @@ export function watchPosition(
     { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 },
   )
   return () => navigator.geolocation.clearWatch(id)
+}
+
+/**
+ * The locale key describing a geolocation failure, so the badge and the banner
+ * cannot drift apart.
+ *
+ * A refusal gets two wordings because the remedy is genuinely different: on the
+ * web the permission belongs to the site and lives in the browser's settings,
+ * while in the installed app it belongs to the app and lives in the system
+ * settings. Telling an app user to check their browser settings sends them
+ * somewhere that does not exist.
+ *
+ * @param error - the failure reported by useGeolocation.
+ * @returns the locale key for the message to show.
+ */
+export function geoErrorKey(error: GeoError): string {
+  if (error === 'timeout') return 'gps.timeout'
+  if (error === 'unavailable') return 'gps.unavailable'
+  if (error === 'imprecise') return 'gps.imprecise'
+  return Capacitor.isNativePlatform() ? 'gps.deniedApp' : 'gps.denied'
 }
 
 /**

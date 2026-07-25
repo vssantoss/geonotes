@@ -14,6 +14,9 @@ importers:
       '@capacitor/core':
         specifier: 8.4.2
         version: 8.4.2
+      '@capacitor/geolocation':
+        specifier: 8.2.0
+        version: 8.2.0(@capacitor/core@8.4.2)
       '@capgo/capacitor-passkey':
         specifier: 8.4.0
         version: 8.4.0(@capacitor/core@8.4.2)
@@ -661,6 +664,14 @@ packages:
 
   '@capacitor/core@8.4.2':
     resolution: {integrity: sha512-fQPRb3JXRaU2pnufDUvqOjhsrYxDQeFRZyaj/sHydIUxD2NxOGHKMpmKUdI+U4OOmKuGZyvRpi7TSJU+7Bjbmg==}
+
+  '@capacitor/geolocation@8.2.0':
+    resolution: {integrity: sha512-N29QcoIPmme0xSxRkm7+3hjoHp6mBAOarxecvtCCZKyOBeKiJsFUq981cezg2XWBa6fhCXJMCCjQPngKK/dIag==}
+    peerDependencies:
+      '@capacitor/core': '>=8.0.0'
+
+  '@capacitor/synapse@1.0.4':
+    resolution: {integrity: sha512-/C1FUo8/OkKuAT4nCIu/34ny9siNHr9qtFezu4kxm6GY1wNFxrCFWjfYx5C1tUhVGz3fxBABegupkpjXvjCHrw==}
 
   '@capgo/capacitor-passkey@8.4.0':
     resolution: {integrity: sha512-XFLn3tMse2pqFQAEzFSXHDhBPqo+DFIbMPWbj1tlrVM34K4Dro78y+Q9IYnb6OuY/8TQi46CaXz8Dsq5f9+N3A==}
@@ -6175,6 +6186,13 @@ snapshots:
   '@capacitor/core@8.4.2':
     dependencies:
       tslib: 2.8.1
+
+  '@capacitor/geolocation@8.2.0(@capacitor/core@8.4.2)':
+    dependencies:
+      '@capacitor/core': 8.4.2
+      '@capacitor/synapse': 1.0.4
+
+  '@capacitor/synapse@1.0.4': {}
 
   '@capgo/capacitor-passkey@8.4.0(@capacitor/core@8.4.2)':
     dependencies:

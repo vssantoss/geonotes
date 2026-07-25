@@ -32,4 +32,12 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Every note is anchored to where it was written, and the app requires a
+         fix of 30 m or better, so the fine permission is the one that matters.
+         Coarse is declared alongside it because Android 12+ lets the user
+         downgrade a fine request to approximate at the prompt, and a request
+         for fine alone offers them no such choice. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 </manifest>
