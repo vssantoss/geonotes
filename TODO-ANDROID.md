@@ -1,0 +1,210 @@
+# TODO Android (Capacitor)
+
+## Final steps
+
+Everything below this section is done except the items collected here. Phase 1 (toolchain, build, deploy to device) and Phase 2's Fix A/B/C, native passkeys and native bot resistance are all implemented and verified end to end on device; what is left is one release step, one on-device verification, the polish pass, and two things that only become possible once the app is in Play Console.
+
+### Release
+
+- [ ] **Merge `android-version` into `main`.** This is the real blocker and it is bigger than it looks: 28 commits are unmerged, and every worker-side piece of native support (CORS middleware, bearer transport, `expectedOrigins`, Play Integrity verification, `assetlinks.json`, the `ANDROID_PASSKEY_ORIGIN` / `ANDROID_PACKAGE` vars) exists only on this branch. Production is currently running two out-of-band `pnpm run deploy` pushes (`8215deee`, `f7764984`) that bypassed the repo, so **`main`'s source does not match what is live**. Merging is what reconciles them, and since a push to `main` is a production release, treat it as one.
+
+### On-device verification still owed
+
+- [ ] Offline path with the service worker disabled: confirm the Dexie/outbox queue still works in the native build. No regression expected, since the outbox is IndexedDB and not the SW cache. This is the last unexercised item. See Fix A.
+
+### Polish (not started)
+
+- [ ] Splash screen, status bar, hardware back button, safe-area insets.
+- [ ] Full re-test of auth + sync + passkey on a real device, not just the emulator.
+
+### Blocked on Play Console
+
+- [ ] Add the Play App Signing certificate. It signs installed release builds, so its fingerprint must be appended to `sha256_cert_fingerprints` in `public/.well-known/assetlinks.json` and its `android:apk-key-hash:` origin appended to `ANDROID_PASSKEY_ORIGIN` in `wrangler.toml`. That var takes a comma-separated list, so the debug cert can stay alongside it and debug builds keep working.
+- [ ] Set `PLAY_INTEGRITY_STRICT` once the app ships from a Play track. Until then sideloaded builds report `UNRECOGNIZED_VERSION` and only the lenient gate passes.
+
+### Out of scope here
+
+- iOS App Attest / DeviceCheck. Needs a Mac and the iOS build, which does not exist yet.
+
+---
+
+The Android build wraps the existing web app in a Capacitor native shell in **bundled mode**: `vite build` emits `dist/`, Capacitor copies it into the native project, and the app runs from the `capacitor://localhost` origin (fully offline, ships the assets).
+
+Work is split into two phases:
+
+- **Phase 1** installs the toolchain and gets the app, unchanged and with auth broken, running on a real phone and (if possible) an emulator. Reaching the end of phase 1 proves we have everything needed to build, deploy, and test the Android app.
+- **Phase 2** is the code refactor that makes the app actually work in a native webview (auth transport, passkeys, service worker, polish).
+
+Everything in phase 1 builds inside WSL. iOS is out of scope here and will need a Mac (Xcode does not run on Windows/WSL).
+
+Steps are checkboxes, meant to be run one at a time. Commands are inline so each step is directly runnable.
+
+---
+
+## Phase 1: build and deploy the current app to a device (errors expected)
+
+Goal: the app renders on a phone (and ideally an emulator). Login/sync will fail at `capacitor://localhost`; that is the expected end state of phase 1, not a bug to chase.
+
+### 1a. Build toolchain (WSL)
+
+- [x] Install JDK 17: `sudo apt install openjdk-17-jdk` (installed: OpenJDK 17.0.19)
+- [x] Verify Java is 17: `java -version`
+- [x] Create the SDK directory (`~/Android/sdk`)
+- [x] Download the Android command-line tools zip (Linux) into `~/Android/sdk`
+- [x] Unzip it so the tools land at `~/Android/sdk/cmdline-tools/latest/`
+- [x] Add to `~/.bashrc`: `ANDROID_HOME=$HOME/Android/sdk` + `cmdline-tools/latest/bin`, `platform-tools`, `emulator` on `PATH`
+- [x] Accept all SDK licenses: `yes | sdkmanager --licenses`
+- [x] Install platform-tools (the `adb` client): `sdkmanager "platform-tools"`
+- [x] Install build-tools: `sdkmanager "build-tools;35.0.0"`
+- [x] Install the platform: `sdkmanager "platforms;android-35"`
+- [x] Verify adb runs and note the version: **adb `37.0.0-14910828` (1.0.41)** — the Windows adb MUST match `37.0.0` (see step 1d)
+
+Note: the emulator and system images are deliberately NOT installed in WSL. Building happens in WSL; the emulator runs on the Windows host (step 1e). WSL only needs the build SDK above plus the adb client.
+
+### 1b. Add Capacitor and generate the Android project
+
+- [x] Confirm the appId: `app.vshub.gnotes`
+- [x] Add dependency: `@capacitor/core` (8.4.2)
+- [x] Add dependency: `@capacitor/cli` (8.4.2, dev)
+- [x] Add dependency: `@capacitor/android` (8.4.2)
+- [x] Init Capacitor: `pnpm exec cap init GeoNotes app.vshub.gnotes --web-dir dist`
+- [x] Review the generated `capacitor.config.ts` (appId/appName/webDir confirmed)
+- [x] Build the web app so `dist/` exists: `pnpm build`
+- [x] Add the Android platform: `pnpm exec cap add android` (created the committed `android/` project)
+- [x] Sync web assets into the native project: `pnpm exec cap sync`
+- [x] `.gitignore` policy: Capacitor's generated `android/.gitignore` already excludes build outputs; commit `android/` as-is
+
+Note: Capacitor 8 needs **JDK 21** for the Gradle build. Installed `openjdk-21-jdk` (21.0.11) and it is now the default via update-alternatives (JDK 17 also still present). `./gradlew` picks up 21 from PATH.
+
+### 1c. Build the APK
+
+- [x] Build a debug APK: `cd android && ./gradlew assembleDebug` (built `android/app/build/outputs/apk/debug/app-debug.apk`, 4.3 MB)
+
+### 1d. adb bridge (one adb server on Windows, WSL as a remote client)
+
+The strategy: run a single adb server on the Windows host that owns both the emulator and the physical phone, and make WSL's adb a remote client of it. Then `adb devices` from WSL sees every target and `adb install` from WSL deploys to them.
+
+- [x] Install Android Studio on the Windows host (Quail 2; bundles the emulator, system images, and Windows-side adb)
+- [x] Windows platform-tools (adb) is r37, matching WSL's adb 37.0.0
+- [x] WSL2 mirrored networking was already active (`wslinfo --networking-mode` = mirrored), so `localhost` is shared; no `wsl --shutdown` needed
+- [x] Windows adb server running and reachable from WSL on `localhost:5037`
+- [x] Pointed WSL adb at the Windows server: `export ADB_SERVER_SOCKET=tcp:localhost:5037` (persisted in `~/.bashrc`)
+- [x] Verified from WSL: `adb devices` lists `emulator-5554`
+
+### 1e. Emulator (Windows host)
+
+- [x] In Android Studio (Windows) created an AVD (Play Store system image) and launched it
+- [x] From WSL confirmed it appears: `adb devices` -> `emulator-5554`
+- [x] Installed the built APK from WSL: `adb install -r android/app/build/outputs/apk/debug/app-debug.apk` -> Success
+- [x] Launched it: `adb shell monkey -p app.vshub.gnotes -c android.intent.category.LAUNCHER 1` (confirm the UI renders; auth/sync failing is expected)
+
+### 1f. Real device
+
+- [X] Attach the phone to the Windows adb server: USB into Windows, or Wireless debugging paired on Windows
+- [X] From WSL confirm both phone and emulator show in `adb devices`
+- [X] Install targeting a specific serial: `adb -s <serial> install -r android/app/build/outputs/apk/debug/app-debug.apk`
+- [X] Launch and confirm the UI renders
+
+**Phase 1 is done** when the app launches and renders on both the emulator and the device. That confirms the full build-to-device pipeline works and unblocks phase 2.
+
+---
+
+## Phase 2: refactor the code so the app works
+
+Detailed rationale for the auth items is in the "Android app (Capacitor)" section moved to the bottom of this file. Do not weaken the web CSRF/cookie protections to make native work; add a separate native-aware path.
+
+### Confirmed failure mode (measured in the emulator WebView over CDP, 2026-07-20)
+
+Drove real `fetch` calls inside the running app's WebView. The WebView origin is **`https://localhost`** (Android Capacitor default scheme; iOS uses `capacitor://localhost`). Three distinct problems, in the order they bite:
+
+- **A. Requests never leave the device.** `src/lib/api.ts` has `API_BASE = import.meta.env.VITE_API_URL ?? ''`, which is empty, so `fetch('/api/...')` resolves to `https://localhost/api/...`. Capacitor's local static server has no such route and **SPA-fallbacks to `index.html`**: the probe got `status 200`, `content-type: text/html`, body `<!doctype html>...`. Not a 404 or network error, a 200 with HTML, so the client's `res.json()` throws a parse error (swallowed for geocode, a generic failure for auth). This blocks everything today.
+- **B. Production is behind a CORS wall.** A direct `fetch('https://gnotes.vshub.app/api/...')` from the WebView throws `TypeError: Failed to fetch`. Confirmed CORS, not connectivity: a `mode:'no-cors'` fetch returns `type:'opaque'` (reachable), the browser just blocks the readable response because the Worker sends no `Access-Control-Allow-Origin` for `https://localhost`.
+- **C. Auth transport (certain from code, not yet reached because A blocks first).** `credentials:'same-origin'` will not attach the `__Host-geonotes_session` cookie cross-origin, and the Worker's `requireTrustedOrigin` + `SameSite=Strict` + `__Host-` prefix are web-origin-only.
+
+### Fix A: point the native build at the real API
+
+One build-time flag, `CAPACITOR_BUILD=1`, drives both differences; the new `pnpm build:native` script sets it (plus `VITE_API_URL`) and runs `cap sync android`. The default `pnpm build` (web) is unchanged.
+
+- [x] Give the Capacitor build an absolute API base: `VITE_API_URL=https://gnotes.vshub.app` (native build only; the web build stays empty so cookies remain same-origin). Verified: `gnotes.vshub.app` is baked into the native bundle and absent from the web bundle. No source change to `api.ts` (it already reads `import.meta.env.VITE_API_URL`); only its comment was updated.
+- [x] Service worker: disable the Workbox SW in the Capacitor build via `VitePWA({ disable: isNativeBuild })` in `vite.config.ts` (plugin stays in the list so `virtual:pwa-register` resolves and `registerSW()` compiles to a no-op). Verified: native `dist/` emits no `sw.js`/`workbox-*.js`; web `dist/` still does.
+  - [ ] Runtime check (needs the emulator): confirm the Dexie/outbox offline path still works with the SW gone. (Deferred: exercised once login works; no regression expected since the outbox is IndexedDB, not the SW cache.)
+- [x] Rebuilt + `cap sync` + reinstalled the APK, verified in the emulator WebView over CDP. Clean-install result (2026-07-21): `origin` is `https://localhost`, `navigator.serviceWorker` has **0** registrations (SW disable confirmed at runtime), the app's absolute call to `https://gnotes.vshub.app/api/*` now throws `TypeError: Failed to fetch` (CORS), and a `mode:'no-cors'` probe returns `type:'opaque'` (production reached, CORS is the sole remaining wall). The old 200-HTML SPA-fallback dead end is gone. **Fix A is done; the failure has moved to CORS (Fix B).**
+
+Dev-only gotcha found while verifying: reinstalling the native APK *over* a prior SW-bearing build (the Phase 1 web build) leaves the old `https://localhost/sw.js` service worker registered, because the native build serves no `/sw.js` so its update check 404s and the SW lingers. `adb shell pm clear app.vshub.gnotes` (wipe app storage) clears it. This does not affect real users: a first-time native install never had that SW. Only matters when reinstalling across the web-to-native transition on the same device.
+
+Also fixed in passing: `capacitor.config.ts` was not in any tsconfig, which broke `pnpm lint` (type-aware ESLint could not resolve it). Added it to `tsconfig.node.json`'s `include` alongside `vite.config.ts`.
+
+### Fix B: allow the native origin at the edge (CORS)
+
+- [x] Worker: added `worker/_lib/cors.ts`, a Hono middleware wired first on `/api/*` in `router.ts`. Allowlists exactly `https://localhost` (Android) and `capacitor://localhost` (iOS); answers the `OPTIONS` preflight directly (204 + allowed origin/methods/headers/max-age) and reflects the allowed origin (+ `Vary: Origin`) onto every `/api` response, including errors, so a 403 stays readable rather than opaque. Deliberately sends **no** `Access-Control-Allow-Credentials`: native uses a bearer token (Fix C), not the cookie, so `SameSite`, the `__Host-` prefix, and `requireTrustedOrigin` are all untouched for the web flow. 7 unit tests added.
+- [x] Verified against the built Worker (curl, 2026-07-21/22): preflights from both native origins return 204 with the reflected origin; native GET/POST responses (incl. the 400 and the origin-check 403) carry the header; untrusted origins and same-origin web requests get none; `Allow-Credentials` never appears. A native POST now moves past CORS to the `requireTrustedOrigin` 403, which is the Fix C wall.
+  - [x] Live confirmation from the emulator WebView. Done 2026-07-25, as a by-product of the Fix C cold-start test below: the app's own `POST https://gnotes.vshub.app/api/sync` from origin `https://localhost` returned a **readable** 200 with a real JSON body. A cross-origin fetch whose response the WebView can parse is CORS working against the deployed Worker; without the allowlist the promise would have rejected `TypeError: Failed to fetch` before any body existed.
+
+### Fix C: native-aware auth transport (cookie -> bearer token)
+
+- [x] Add a secure-storage plugin and keep the session token in Android Keystore / EncryptedSharedPreferences. Added `capacitor-secure-storage-plugin@0.13.0` (Android EncryptedSharedPreferences; peers only on `@capacitor/core >=8.0.0`, so no extra plugin deps). New `src/lib/native-session.ts` wraps it as `get/set/clearSessionToken`, each a no-op off native (`Capacitor.isNativePlatform()` false) since the web session lives in the HttpOnly cookie and JS cannot read it. `cap sync` registered the plugin and `gradlew assembleDebug` links + packages it, so the native module compiles into the app.
+- [x] Refactor `apiFetch`: stop relying on the `__Host-geonotes_session` cookie; send the session token explicitly (Authorization header) when running native. `apiFetch` now reads `getSessionToken()` and, when one is stored, adds `Authorization: Bearer <token>`; `credentials: 'same-origin'` is unchanged, so on web (token always null) the request is byte-for-byte the old cookie flow. `auth.ts` stores the token returned by `passkey-login`/`passkey-register` (`setSessionToken`, before the sign-in is applied so follow-up calls can authenticate) and clears it on sign-out (`signOut`, `cancelPendingSignIn`); `sync.ts`'s `wipeLocalAccountData` clears it too, covering remote revocation.
+- [x] Worker: add a native-aware, CSRF-safe auth path separate from the browser cookie flow (accept and validate the header token). `readBearerToken` added to `http.ts`; `requireUser`/`destroySession`/`currentSessionHash` now resolve the token as bearer-then-cookie (bearer used exclusively when present, so an ambient cookie is never smuggled past the origin check). `requireTrustedOrigin` skips the Origin check only for bearer requests (a token a cross-site page cannot read is CSRF-immune), leaving `SameSite=Strict`, `__Host-` and the cookie-path Origin check untouched. `passkey-login`/`passkey-register` return the raw token in the body only for native origins (`isNativeOrigin`, browser-unforgeable Origin), never to web where it stays HttpOnly. 3 tests added (1 router, 2 sync integration): a native cross-origin bearer POST with **no cookie** stores and pulls back a note (200) against real SQLite, and an unknown bearer yields 401 not 403, proving the origin gate falls for bearer requests. Full pipeline green (163 tests).
+  - [x] Verify login + session + sync work end to end from the WebView. **Transport done and verified, on-device.** Fix C was deployed out-of-band to production (`pnpm run deploy`, version `8215deee`, no merge to main), and the built APK was installed on `emulator-5554` and driven over CDP (2026-07-22). Confirmed in the real WebView: origin `https://localhost`, 0 service-worker registrations, `SecureStoragePlugin` registered; a secure-storage round-trip wrote/read/removed the token key (EncryptedSharedPreferences works); a `POST /api/sync` carrying `Authorization: Bearer <bogus>` reached the live worker and returned **401 "invalid session"** (bearer cleared `requireTrustedOrigin` and `requireUser` actually read it), where the same POST with no bearer returned **403 "bad origin"**. So the store -> bearer -> server path works end to end through the app.
+    - [x] **Closed 2026-07-25 with a cold-start test on `emulator-5554`.** Method: fresh `pnpm build:native` + `assembleDebug` + `adb install -r`, then `pm clear` so `SecureStoragePlugin.keys()` was provably `[]` and any token seen afterwards had to come from the login. Real Credential Manager passkey login (manual, GPM sheet), which wrote a 64-char token `3c878240b3...` to EncryptedSharedPreferences. Then `am force-stop`, which kills the process and with it the new in-memory `cachedToken` in `native-session.ts`, and a cold relaunch. In the **new** process (`cachedToken` necessarily `undefined`), logcat shows `SecureStoragePlugin get {"key":"geonotes_session_token"}` returning that same token, and CDP network capture shows the app's own `POST https://gnotes.vshub.app/api/sync` carrying `Authorization: Bearer 3c878240...` and **no cookie**, answered **200**. A full pull with that token returns the account's real note. So login -> `setSessionToken` -> EncryptedSharedPreferences -> process death -> `getSessionToken` -> authenticated sync is confirmed as one chain, not as separately-verified halves.
+    - [x] The former blocker here was a **real** passkey login producing a real session token, and it is blocked on the next phase, not on Fix C: the web ceremony (`@simplewebauthn/browser`) uses `RP_ID = gnotes.vshub.app`, but the WebView origin is `https://localhost`, and WebAuthn requires the RP_ID to be a registrable suffix of the page origin, which `localhost` is not, so the browser ceremony is rejected before it starts. Obtaining a token on-device therefore needs the **native passkeys** work below (Android Credential Manager + `assetlinks.json`). Once a token exists, the session + sync half rides the bearer transport already verified above.
+
+### Native passkeys
+
+Scoped 2026-07-22. The WebView cannot run the web WebAuthn ceremony (origin `https://localhost`, RP_ID `gnotes.vshub.app` is not a suffix of it), so native must call Android Credential Manager, which produces an assertion whose origin is `android:apk-key-hash:<base64url(SHA-256(signing cert))>` (not the https origin) and which only works once the domain publishes a Digital Asset Link to the app + signing cert. Both the origin and the asset link derive from whichever cert signs the *installed* APK; a fingerprint mismatch is the main silent-failure mode. **Decisions locked:** plugin = `@capgo/capacitor-passkey` (v8.4.0, tracks Capacitor 8.4; verify it round-trips the `@simplewebauthn` JSON before committing). Fingerprint = **debug keystore now** (already have it: `FE:17:21:5C:5D:D8:1B:32:5E:70:ED:0A:5A:B5:73:01:35:97:B0:B4:1A:97:E7:DE:16:00:A0:37:9E:8F:3E:98`), add the Play App Signing cert when the app is in Play Console.
+
+- [x] Serve `/.well-known/assetlinks.json` (static file in `public/.well-known/`, served by the assets binding as `application/json`) associating package `app.vshub.gnotes` + signing-cert SHA-256 with `delegate_permission/common.get_login_creds`. List the debug fingerprint now; add the prod cert later. Verify reachable at `https://gnotes.vshub.app/.well-known/assetlinks.json` with the right content-type. Done: file created with the debug fingerprint; `pnpm build` copies the `.well-known` dot-directory into `dist/`; verified locally under `wrangler dev` -> `200`, `Content-Type: application/json`, real JSON body (not the SPA `index.html` fallback). On production `serveSite` passes straight through to `ASSETS.fetch`, so the real file wins. Not yet live: needs a deploy (batch with the task-2 server change).
+
+  **Correction (2026-07-24): the statement needs BOTH relations, not just `get_login_creds`.** With `get_login_creds` alone, 1Password accepted the ceremony but Google Password Manager rejected it: GMS ran `[ValidateRpIdOperation]` and failed with `[50152] RP ID cannot be validated`, surfacing as `CreatePublicKeyCredentialDomException` / `GetPublicKeyCredentialDomException` in the app. Everything else checked out (file live as `application/json`, no redirect; installed APK's signer `fe1721...3e98` identical to `sha256_cert_fingerprints`; `digitalassetlinks.googleapis.com` `assetlinks:check` returned `linked: true`), which is what made it look like a device problem rather than a file problem. Google's Credential Manager prerequisites require `delegate_permission/common.handle_all_urls` **alongside** `get_login_creds` until their validation logic stops needing the App Links relation, and GMS enforces that today while third-party providers do not. Adding `handle_all_urls` grants nothing extra here: App Links only activate for a host the manifest claims with an `autoVerify` VIEW/BROWSABLE intent filter, and the app declares only LAUNCHER. Deployed out-of-band (version `f7764984`); native passkey login with Google Password Manager verified working on `emulator-5554` right after.
+- [x] Server: accept the android origin in verification. Change `expectedOrigin` from `env.ORIGIN` to `[env.ORIGIN, <android:apk-key-hash>]` at the three verify sites (`passkey-login.ts`, `passkey-register.ts`, `credentials/register.ts`); keep `expectedRPID = env.RP_ID`. Source the apk-key-hash from a new env var (debug vs prod differ; do not hardcode). Options endpoints need no change (`rpID` already `env.RP_ID`). Done: new optional `ANDROID_PASSKEY_ORIGIN` env var (`worker/_lib/env.ts`), set in `wrangler.toml [vars]` to the debug apk-key-hash `android:apk-key-hash:_hchXF3YGzJecO0KWrVzATWXsLQal-feFgCgN56PPpg` (base64url of the same SHA-256 that is in assetlinks.json). Shared `expectedOrigins(env)` helper in `challenge.ts` returns `[ORIGIN]` when the var is absent (web/tests unchanged) or `[ORIGIN, ANDROID_PASSKEY_ORIGIN]` when set; wired at all three verify sites. Unit test `challenge.test.ts` covers both branches. Full pipeline green (165 tests).
+- [x] Client: add `@capgo/capacitor-passkey` + `cap sync`. New `src/lib/passkey.ts` exposing `passkeyGet`/`passkeyCreate` that dispatch to `@simplewebauthn/browser` on web and the plugin on native (`Capacitor.isNativePlatform()`), replacing the 3 direct `startAuthentication`/`startRegistration` calls (`auth.ts` x2, `account.ts` x1) and preserving `PasskeyUnavailableError` (map the native no-credential/cancel to it). Expect a thin adapter to reshape fields. Done: `@capgo/capacitor-passkey@8.4.0` added; `passkey.ts` dispatches by platform and reshapes the plugin credential into `@simplewebauthn`'s `Registration`/`AuthenticationResponseJSON` (identical shape apart from looser types and `userHandle: null`, which is normalised to `undefined`). `PasskeyUnavailableError` stays in `auth.ts`; its login `try/catch` wraps any `passkeyGet` throw, so a native cancel/no-credential still maps to it with no change. The two create sites stay unwrapped, matching prior behaviour. Not using the plugin's `autoShimWebAuthn`, so the "no passkey domains configured" `cap sync` warning is expected and harmless (Android takes the RP from the request `rpId` + assetlinks). `cap sync android` wired the plugin into gradle; `:app:assembleDebug` builds with it. Full web pipeline green (165 tests).
+- [x] Android project: confirm/raise `minSdk` for Credential Manager passkey create (robust API 28+); the AVD is a Play Store image (required for Google Password Manager). Done: raised `minSdkVersion` 24 -> 28 in `android/variables.gradle` (below 28 the Credential Manager passkey ceremony is not backed by Play Services and fails; this build exists to do passkeys). `:app:assembleDebug` builds and the APK manifest reports `minSdkVersion:'28'`.
+- [x] Verify end to end on the emulator. Native account *creation* is still Turnstile-blocked (see Native bot resistance), so test **login**. Victor uses **1Password**, so the provider is 1Password, not Google Password Manager (the app is provider-agnostic: assetlinks + the apk-key-hash origin work with any Credential Manager provider). Path: create the passkey for `gnotes.vshub.app` on desktop into 1Password, install + sign into the 1Password Android app on the emulator and enable it as a credential provider (Settings -> Passwords, passkeys & autofill), then native passkey login -> Credential Manager sheet (manual, native dialog) -> Fix C stores the token -> sync. Third-party providers need API 34+; the emulator (`emulator-5554`) is API 35, a Play `gphone` build, so it qualifies. Google Password Manager remains an alternative (create the passkey under the emulator's Google account; it syncs down, no app install). **Staged:** tasks 1+2+3 deployed to production (assetlinks live, `ANDROID_PASSKEY_ORIGIN` bound); native APK (`pnpm build:native` + `assembleDebug`, prod API URL baked in) installed on `emulator-5554`. Remaining is the manual 1Password sign-in above.
+
+  **Done for login (2026-07-24), with Google Password Manager, on the emulator.** 1Password is no longer required to test: the provider-specific failure was the missing `handle_all_urls` relation (see task 1). After that deploy, driving the app's own WebView end to end -> Credential Manager sheet -> GPM -> `POST /api/auth/passkey-login` returned **200** with the account e-mail and a session token. The assertion's `clientDataJSON` carries `"origin":"android:apk-key-hash:_hchXF3YGzJecO0KWrVzATWXsLQal-feFgCgN56PPpg"` and `"androidPackageName":"app.vshub.gnotes"`, i.e. the apk-key-hash origin the Worker allowlists, so task 2's `expectedOrigins` is confirmed against a real assertion rather than a synthetic one. **Creation also verified on-device (2026-07-25)**, once Play Integrity unblocked the e-mail-code flow that issues the enroll token. Still unverified: the Fix C store-token -> sync leg driven by a real login rather than a bogus bearer.
+
+### Hardening + polish
+
+- [~] Native bot resistance (Android done: implemented, deployed and tested on device; only the iOS item below remains). Full rationale in the "Native bot resistance" part of the moved section below:
+  - [x] Do NOT render or force Turnstile in the native webview: `TurnstileWidget` returns null on native and `AuthScreen`'s `turnstileRequired` is false there, so the widget never mounts in the `https://localhost` webview (which was throwing 300010/300030 and hanging). Play Integrity is used instead.
+  - [x] Android: obtain a Play Integrity token in the app and send it with the `email-request` call. `PlayIntegrityPlugin.java` (registered in `MainActivity`, `com.google.android.play:integrity:1.4.0`) wraps the Standard API; `src/lib/play-integrity.ts` calls it with the linked Cloud project number (`964942669958`, baked in by `build:native`) and a request hash. Server verifies via Google's `decodeIntegrityToken` in `worker/_lib/play-integrity.ts` (package `app.vshub.gnotes`, request hash = sha256(email), freshness; verdicts required only under `PLAY_INTEGRITY_STRICT`). Uses SA key `PLAY_INTEGRITY_SA_JSON`.
+  - [x] Backend: `email-request` accepts EITHER a Turnstile token (web) OR a valid Play Integrity token (native), dispatching on the token (not a client flag) and only taking the attestation path when the SA key is configured. The per-IP edge rate limit stays the floor.
+  - [x] No "skip if native" bypass: absent both tokens, the request falls through to Turnstile (403 in prod); a bad integrity token is rejected. Neither is forgeable into a bypass.
+  - [x] DEPLOY: set the Worker secret `PLAY_INTEGRITY_SA_JSON` from `~/dev/geonotes-vshub-b53779f9aea5.json` before/with the push, else native `email-request` falls back to Turnstile (which the app can't solve) and 403s. Confirmed present on `geonotes-worker` via `wrangler secret list` (2026-07-24), so the native e-mail path is no longer secret-blocked. Leave `PLAY_INTEGRITY_STRICT` unset until the app ships from a Play track.
+  - [X] TEST: on device, create/recover an account (the flow that was Turnstile-blocked). Sideloaded debug builds report `UNRECOGNIZED_VERSION`, tolerated by the lenient (non-strict) gate; full verdicts need an Internal-testing-track install.
+  - [ ] iOS (later): App Attest (hardware-bound key, assert per request), with DeviceCheck as the lighter-weight fallback.
+
+  Reality check (verified 2026-07-20): Turnstile is ALREADY required on `email-request` in production, so this is a functional BLOCKER, not just future hardening. `worker/api/auth/email-request.ts:39` calls `verifyTurnstile`, which throws `403 "turnstile required"` whenever `TURNSTILE_SECRET` is set (`worker/_lib/turnstile.ts:36-40`), and it is set in production. Consequence: once the native app can reach the API (Fix A/B/C), its email sign-in / account-creation flow will 403 until the backend accepts a Play Integrity token as the native alternative on `email-request`. Passkey *login* does not call Turnstile (`passkey-login-options` / `passkey-login`), so a returning passkey user is unaffected; only email-code issuance (new account, email change) is gated. This is why bot resistance cannot simply be deferred to the end for anything involving account creation.
+- [x] Fix the app icon: replaced Capacitor's default launcher icon with the GeoNotes mark. `scripts/generate-native-assets.mjs` rasterises the source PNGs from `public/favicon.svg` (plus a glyph-only foreground SVG scaled into the adaptive safe zone), then `@capacitor/assets generate --android` fans them out. The generated `mipmap-anydpi-v26/ic_launcher*.xml` is edited back to the no-inset adaptive form: the tool insets both layers 16.7%, which would shrink the solid red background into a 66.6% square (transparent corners under a circular mask) and double-shrink the glyph, so the foreground SVG carries the safe-zone padding instead and the background stays full-bleed red. Orphaned Capacitor-default vector drawables (green robot foreground + its bg colour) removed. Verified on emulator: the OS-rendered round adaptive icon shows the full red circle with the glyph inside the safe zone, no transparent corners. Commit `4716fdb`. NOTE: re-running `capacitor-assets` re-adds the insets, so the XML edit must be redone after any regeneration (documented in `scripts/generate-native-assets.mjs`).
+- [ ] Polish: splash screen, status bar, hardware back button, safe-area insets
+- [ ] Re-test the full auth + sync + passkey flow on a device
+
+---
+
+## Android app (Capacitor)
+
+Start work on the Android build of the app.
+
+IMPORTANT auth caveat, do not just reuse the web session transport. The web app authenticates with an HttpOnly `__Host-geonotes_session` cookie plus `SameSite=Strict` and a server-side `Origin` check (`requireTrustedOrigin`). That design is web-origin only and will not work from a Capacitor webview:
+
+- A Capacitor webview serves the UI from a local scheme (`capacitor://localhost` / `https://localhost`), so calls to the remote API are cross-site. `SameSite=Strict` means the session cookie is never attached, so every request is unauthenticated even after a successful login.
+- Even if a cookie attached, the webview's `Origin` is not `env.ORIGIN`, so `requireTrustedOrigin` returns 403 on every non-GET.
+- iOS WKWebView (and increasingly Android) block cross-site cookie storage, so the `Set-Cookie` may be dropped entirely.
+- The trap: making the cookie work in native tempts loosening `SameSite`, the `__Host-` prefix, or the `Origin` check, which would undo the CSRF/cross-site protections the security work just added. Do not weaken those.
+
+What native should do instead:
+
+- Keep the session token in platform secure storage (Android Keystore / EncryptedSharedPreferences), send it explicitly (e.g. Authorization header), and give the API a native-aware, CSRF-safe auth path separate from the browser cookie flow. A native app is not subject to browser CSRF the same way.
+- WebAuthn/passkeys need platform APIs and Android Digital Asset Links (assetlinks.json) for the RP; `RP_ID` is currently scoped to `gnotes.vshub.app`. Plan passkey support as its own piece.
+- Decide the model: thin wrapper around the hosted PWA vs. a build that bundles the client and talks to the API. Either way the auth transport above still applies.
+
+### Native bot resistance (Play Integrity / App Attest)
+
+Turnstile is the web answer for "is this a real human/browser", but it is web-first: there is no official native mobile SDK, and in a Capacitor webview the widget origin is `localhost` (`https://localhost` / `capacitor://localhost`), which both weakens the siteverify hostname signal and is finicky around `Origin`/`Referer`. Do not force Turnstile through the webview as the primary native defense. Use the platform attestation APIs instead, which are purpose-built for "is this a genuine, unmodified instance of our app": **Play Integrity** on Android and **App Attest / DeviceCheck** on iOS.
+
+The constraint that makes this non-optional: once `email-request` *requires* a proof-of-humanity token (see "Turnstile on email-request"), every client must supply one, including native. Do not add a "skip if native" bypass, since a client-asserted native flag is trivially forgeable and reopens the exact abuse hole Turnstile closes.
+
+- Backend: have the pre-auth email/abuse-sensitive endpoints (`email-request` first) accept **either** a Turnstile token (web) **or** a valid attestation token (native), and verify each server-side. Reject requests carrying neither. Keep the per-IP edge rate limit as the floor under both.
+- Android: obtain a Play Integrity token in the app, send it with the request, and verify it server-side against Google's Play Integrity API (check app package, signing cert, and integrity verdicts). Requires a Google Play project and a service credential for verification.
+- iOS (when that build happens): App Attest to bind a hardware key to the app instance, then assert per request; verify server-side. DeviceCheck as the lighter-weight fallback.
+- Sequencing: land web Turnstile on `email-request` first (the backend gains the "token required" contract), then add the native attestation branch before shipping account creation in the Android app, so native signup is never left either unprotected or broken.

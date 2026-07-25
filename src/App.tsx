@@ -7,6 +7,7 @@ import { clearDraft, readDraft } from './lib/draft'
 import { hasUnsyncedNotes, signOut } from './lib/auth'
 import { syncNow } from './lib/sync'
 import { useGeolocation } from './hooks/useGeolocation'
+import { useLocationPermission } from './hooks/useLocationPermission'
 import { useOnline } from './hooks/useOnline'
 import { useSyncStatus } from './hooks/useSyncStatus'
 import { useT } from './lib/i18n'
@@ -16,6 +17,7 @@ import { AuthScreen } from './screens/AuthScreen'
 import { SettingsScreen } from './screens/SettingsScreen'
 import { AccountMenu } from './components/AccountMenu'
 import { SignOutDialog } from './components/SignOutDialog'
+import { LocationPermissionDialog } from './components/LocationPermissionDialog'
 import { Notice } from './components/Notice'
 
 /**
@@ -45,7 +47,14 @@ export default function App() {
   const [view, setView] = useState<ViewMode>('nearby')
   // Lives in the shell (not MainScreen) so the GPS watch keeps refining the
   // location while a new note is being written during the refinement window.
-  const geo = useGeolocation(editing === null && !showAuth && !showSettings)
+  const locationPermission = useLocationPermission()
+  // Acquisition is gated on the permission: starting a watch first would make
+  // the Android WebView raise the system prompt itself, on top of the app's
+  // explanation dialog.
+  const geo = useGeolocation(
+    editing === null && !showAuth && !showSettings,
+    locationPermission.permission,
+  )
   const [confirmSignOut, setConfirmSignOut] = useState(false)
   // Whether unsynced changes remain when the sign-out dialog opens, so it can
   // warn that removing notes from the device would lose them.
@@ -84,6 +93,18 @@ export default function App() {
     await syncNow()
     setSignOutUnsynced(await hasUnsyncedNotes())
     setConfirmSignOut(true)
+  }
+
+  /**
+   * Retry from the location banner. Re-arming the watch cannot fix a permission
+   * problem, so those reopen the explanation dialog instead, which is what
+   * leads to the system prompt or to the settings. Acquisition is still
+   * restarted either way, since on the web the permission may have been granted
+   * in the browser's own UI while the banner was up.
+   */
+  const handleRetryLocation = () => {
+    if (geo.error === 'denied' || geo.error === 'imprecise') locationPermission.reopen()
+    geo.retry()
   }
 
   if (showAuth) {
@@ -149,7 +170,7 @@ export default function App() {
         <EditorScreen target={editing} geo={geo} onDone={closeEditor} />
       ) : (
         <MainScreen
-          geo={geo}
+          geo={{ ...geo, retry: handleRetryLocation }}
           view={view}
           onViewChange={setView}
           onAdd={(location) => setEditing({ kind: 'new', location })}
@@ -160,6 +181,14 @@ export default function App() {
       <footer className="mt-auto px-4 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] text-center text-[11px] text-muted-foreground/70">
         {t('attribution.osm')}
       </footer>
+
+      {locationPermission.explaining && (
+        <LocationPermissionDialog
+          permission={locationPermission.explaining}
+          onAllow={() => void locationPermission.request()}
+          onDismiss={locationPermission.dismiss}
+        />
+      )}
 
       {confirmSignOut && (
         <SignOutDialog

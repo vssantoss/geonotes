@@ -55,6 +55,16 @@ export function toBase64Url(bytes: Uint8Array): string {
 }
 
 /**
+ * Decodes a standard base64 string to its raw bytes.
+ *
+ * @param encoded - base64 text, without any surrounding PEM armor or newlines.
+ * @returns the decoded bytes.
+ */
+export function fromBase64(encoded: string): Uint8Array {
+  return Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0))
+}
+
+/**
  * Compares two encoded strings using the Workers timing-safe primitive.
  *
  * @param a - first encoded string.

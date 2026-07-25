@@ -3,6 +3,8 @@ import { claimEmailCodeRequest, issueEmailCode, pruneExpiredEmailCodes } from '.
 import { getEmailSender } from '../../_lib/email'
 import { enforceAuthAbuseLimit } from '../../_lib/rate-limit'
 import { verifyTurnstile } from '../../_lib/turnstile'
+import { verifyPlayIntegrity } from '../../_lib/play-integrity'
+import { sha256Hex } from '../../_lib/crypto'
 import type { Env } from '../../_lib/env'
 
 /**
@@ -25,18 +27,29 @@ import type { Env } from '../../_lib/env'
 export const onRequestPost = route<Env>(async ({ env, request, waitUntil }) => {
   await enforceAuthAbuseLimit(env, request)
   const body = (await request.json().catch(() => null)) as
-    | { email?: unknown; mode?: unknown; turnstileToken?: unknown }
+    | { email?: unknown; mode?: unknown; turnstileToken?: unknown; integrityToken?: unknown }
     | null
   const email = normalizeEmail(body?.email)
   const mode = body?.mode === 'recover' ? 'recover' : 'create'
   // Prove the caller is human before any D1 access below, so a bot with no valid
-  // token never reaches the database (and cannot make us send an e-mail). No-op
-  // until TURNSTILE_SECRET is configured. Applies to both create and recover; it
-  // runs before the account lookup, so it leaks nothing about which addresses
-  // exist. Kept before normalizeEmail's throw would matter little, but placed
-  // after it so an obviously bad e-mail still short-circuits without a siteverify
-  // round trip.
-  await verifyTurnstile(env, body?.turnstileToken, request)
+  // token never reaches the database (and cannot make us send an e-mail). Placed
+  // after normalizeEmail so an obviously bad e-mail still short-circuits without a
+  // verification round trip. Applies to both create and recover; it runs before
+  // the account lookup, so it leaks nothing about which addresses exist.
+  //
+  // The web build has a Turnstile widget; the native Android build has none (the
+  // widget cannot run inside its https://localhost webview), so it sends a Play
+  // Integrity token instead. We dispatch on the token, NOT on a client-claimed
+  // "I'm native" flag, and only take the attestation path when its credential is
+  // configured, so there is no tokenless bypass: with Play Integrity configured a
+  // native token must verify here; without it, or with no integrity token, the
+  // request falls through to Turnstile. The integrity token is bound to this
+  // address via sha256(email) so it cannot be replayed against another.
+  if (env.PLAY_INTEGRITY_SA_JSON && body?.integrityToken !== undefined) {
+    await verifyPlayIntegrity(env, body.integrityToken, await sha256Hex(email))
+  } else {
+    await verifyTurnstile(env, body?.turnstileToken, request)
+  }
   const now = Date.now()
   // Opportunistic TTL eviction of expired codes and lapsed rate-limit windows,
   // amortized onto the same requests that grow those tables. Runs after the

@@ -1,10 +1,13 @@
-import { startAuthentication, startRegistration } from '@simplewebauthn/browser'
 import type {
+  AuthenticationResponseJSON,
   PublicKeyCredentialCreationOptionsJSON,
   PublicKeyCredentialRequestOptionsJSON,
 } from '@simplewebauthn/browser'
+import { passkeyCreate, passkeyGet } from './passkey'
 import { apiFetch } from './api'
+import { clearSessionToken, setSessionToken } from './native-session'
 import { db, KV, kvGet, kvSet } from './db'
+import { sha256Hex } from './hash'
 import { syncNow, wipeLocalAccountData } from './sync'
 
 /**
@@ -43,16 +46,21 @@ export async function passkeyLogin(): Promise<PendingSignIn> {
     options: PublicKeyCredentialRequestOptionsJSON
     challengeToken: string
   }>('/api/auth/passkey-login-options', {})
-  let response: Awaited<ReturnType<typeof startAuthentication>>
+  let response: AuthenticationResponseJSON
   try {
-    response = await startAuthentication({ optionsJSON: options })
+    response = await passkeyGet(options)
   } catch (err) {
     throw new PasskeyUnavailableError(err)
   }
-  const out = await apiFetch<{ email: string }>('/api/auth/passkey-login', {
+  const out = await apiFetch<{ email: string; token?: string }>('/api/auth/passkey-login', {
     response,
     challengeToken,
   })
+  // Native gets the session token in the body (web gets it as an HttpOnly
+  // cookie, so out.token is undefined there and this is a no-op). Store it now,
+  // before finishSignIn or cancelPendingSignIn, so the follow-up requests those
+  // make can authenticate with the bearer.
+  await setSessionToken(out.token)
   return { email: out.email }
 }
 
@@ -67,23 +75,30 @@ export async function passkeyLogin(): Promise<PendingSignIn> {
  *
  * @param email - the address to send the code to.
  * @param mode - 'create' for a new account, 'recover' for an existing one.
- * @param turnstileToken - the Turnstile widget token, when bot protection is
- *          configured; omitted (undefined) in dev where the server skips it.
+ * @param turnstileToken - the Turnstile widget token, used on web when bot
+ *          protection is configured; omitted (undefined) in dev, or on native
+ *          where Play Integrity is used instead.
+ * @param integrityToken - the Play Integrity token, used on native Android in
+ *          place of Turnstile (the widget cannot run in the app's webview);
+ *          omitted on web and when Play Integrity is unavailable.
  * @returns the dev-only echoed code when the server runs in dev mode and a code
  *          was actually sent, so the flow is testable without a real inbox;
  *          empty in production or when nothing was sent.
  * @throws ApiError(429) when a code was requested too recently.
- * @throws ApiError(403) when the Turnstile token is missing or rejected.
+ * @throws ApiError(403) when the required bot-resistance token is missing or
+ *          rejected (Turnstile on web, Play Integrity on native).
  */
 export async function requestEmailCode(
   email: string,
   mode: 'create' | 'recover',
   turnstileToken?: string | null,
+  integrityToken?: string | null,
 ): Promise<{ devCode?: string }> {
   return apiFetch<{ sent: boolean; devCode?: string }>('/api/auth/email-request', {
     email,
     mode,
     turnstileToken: turnstileToken ?? undefined,
+    integrityToken: integrityToken ?? undefined,
   })
 }
 
@@ -121,12 +136,15 @@ export async function createAccountWithPasskey(
     options: PublicKeyCredentialCreationOptionsJSON
     challengeToken: string
   }>('/api/auth/passkey-register-options', { enrollToken })
-  const response = await startRegistration({ optionsJSON: options })
-  await apiFetch<{ ok: boolean }>('/api/auth/passkey-register', {
+  const response = await passkeyCreate(options)
+  const out = await apiFetch<{ ok: boolean; token?: string }>('/api/auth/passkey-register', {
     email,
     response,
     challengeToken,
   })
+  // Store the native bearer token (undefined, so a no-op, on web). See
+  // passkeyLogin for why this happens before the sign-in is applied.
+  await setSessionToken(out.token)
   return { email }
 }
 
@@ -172,6 +190,9 @@ export async function finishSignIn(pending: PendingSignIn): Promise<void> {
  */
 export async function cancelPendingSignIn(): Promise<void> {
   await apiFetch('/api/auth/logout', {}).catch(() => {})
+  // Drop the native bearer after the revocation request, which needed it to name
+  // the session being revoked (no-op on web).
+  await clearSessionToken()
 }
 
 /**
@@ -209,11 +230,7 @@ export async function hasUnsyncedNotes(): Promise<boolean> {
  * @returns a hex-encoded SHA-256 digest.
  */
 export async function hashAccount(email: string): Promise<string> {
-  const data = new TextEncoder().encode(email.trim().toLowerCase())
-  const digest = await crypto.subtle.digest('SHA-256', data)
-  return Array.from(new Uint8Array(digest))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
+  return sha256Hex(email.trim().toLowerCase())
 }
 
 /**
@@ -233,13 +250,15 @@ export async function signOut(keepNotes: boolean): Promise<void> {
   await apiFetch('/api/auth/logout', {}).catch(() => {})
   if (!keepNotes) {
     // Same wipe a remote revocation applies: notes, outbox and every account
-    // marker removed together.
+    // marker removed together, including the native bearer.
     await wipeLocalAccountData()
     return
   }
   // Keeping the notes: only drop the account link and the account-scoped sync
   // cursor, so a later sign-in reconciles from scratch while the notes stay
-  // available offline.
+  // available offline. The native bearer still has to go, since apiFetch must
+  // stop sending the token the revocation above just killed (no-op on web).
+  await clearSessionToken()
   await db.transaction('rw', db.kv, async () => {
     await kvSet(KV.userEmail, null)
     await kvSet(KV.syncCursor, null)

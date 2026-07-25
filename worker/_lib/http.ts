@@ -1,4 +1,5 @@
 import type { Context } from 'hono'
+import { isNativeOrigin } from './cors'
 
 /**
  * Security headers applied to every API response.
@@ -67,13 +68,46 @@ interface RouteEnv {
 /**
  * Rejects cross-origin state-changing requests before route logic runs.
  *
+ * The Origin check defends the ambient session cookie against CSRF. A request
+ * that authenticates with a bearer token is immune: a cross-site page cannot
+ * read the token to attach it, so the attacker-forged request never carries one.
+ * Native (Capacitor) clients use exactly that bearer transport once signed in,
+ * which is how they clear this gate without the web cookie's Origin protection
+ * being relaxed.
+ *
+ * The login bootstrap has no bearer yet: passkey and e-mail sign-in fetch their
+ * options and post their result before any token exists, and the native webview
+ * sends those from https://localhost, which is not env.ORIGIN. A request from a
+ * trusted native origin is still no CSRF risk to the cookie, because CORS never
+ * grants those origins Access-Control-Allow-Credentials, so the browser never
+ * attaches the env.ORIGIN cookie to them, and the native-origin allowlist cannot
+ * be forged by page script. So an exact native-origin match clears the gate too.
+ *
  * @param env - function environment containing the allowed web origin.
  * @param request - incoming request.
- * @throws HttpError(403) when an unsafe request has no matching Origin header.
+ * @throws HttpError(403) when an unsafe cookie request has no matching Origin.
  */
 function requireTrustedOrigin(env: RouteEnv, request: Request): void {
   if (request.method === 'GET' || request.method === 'HEAD' || request.method === 'OPTIONS') return
+  if (readBearerToken(request) !== null) return
+  if (isNativeOrigin(request)) return
   if (!hasTrustedOrigin(request, env.ORIGIN)) throw new HttpError(403, 'bad origin')
+}
+
+/**
+ * Reads a bearer token from the Authorization header. Native (Capacitor)
+ * clients authenticate with this instead of the session cookie, which the
+ * webview cannot send cross-origin.
+ *
+ * @param request - incoming request.
+ * @returns the token, or null when no non-empty Bearer credential is present.
+ */
+export function readBearerToken(request: Request): string | null {
+  const header = request.headers.get('Authorization')
+  if (!header) return null
+  // A bearer credential contains no whitespace, so one non-empty run of
+  // non-space characters after the scheme is the whole token.
+  return /^Bearer[ \t]+(\S+)\s*$/i.exec(header)?.[1] ?? null
 }
 
 /**

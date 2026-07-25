@@ -1,9 +1,9 @@
 import { verifyAuthenticationResponse } from '@simplewebauthn/server'
 import { isoBase64URL } from '@simplewebauthn/server/helpers'
 import type { AuthenticationResponseJSON } from '@simplewebauthn/server'
-import { json, HttpError, route } from '../../_lib/http'
-import { createSession } from '../../_lib/session'
-import { consumeChallenge, PASSKEY_LOGIN_SUBJECT } from '../../_lib/challenge'
+import { HttpError, route } from '../../_lib/http'
+import { issueSessionResponse } from '../../_lib/session'
+import { consumeChallenge, expectedOrigins, PASSKEY_LOGIN_SUBJECT } from '../../_lib/challenge'
 import { parseTransports } from './passkey-register-options'
 import type { Env } from '../../_lib/env'
 
@@ -43,7 +43,7 @@ export const onRequestPost = route<Env>(async ({ env, request }) => {
   const verification = await verifyAuthenticationResponse({
     response: body.response,
     expectedChallenge,
-    expectedOrigin: env.ORIGIN,
+    expectedOrigin: expectedOrigins(env),
     expectedRPID: env.RP_ID,
     credential: {
       id: cred.id,
@@ -60,7 +60,7 @@ export const onRequestPost = route<Env>(async ({ env, request }) => {
     .bind(verification.authenticationInfo.newCounter, cred.id)
     .run()
 
-  const response = json({ email: cred.email })
-  response.headers.append('Set-Cookie', await createSession(env, cred.user_id, request))
-  return response
+  // Returns the account e-mail plus whichever session transport the caller can
+  // use; issueSessionResponse owns that split.
+  return issueSessionResponse(env, cred.user_id, request, { email: cred.email })
 })

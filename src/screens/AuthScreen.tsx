@@ -13,9 +13,10 @@ import {
   wouldDisplaceNotes,
   type PendingSignIn,
 } from '../lib/auth'
+import { getPlayIntegrityToken } from '../lib/play-integrity'
 import { ApiError } from '../lib/api'
 import { ConfirmDialog } from '../components/ConfirmDialog'
-import { TurnstileWidget, TURNSTILE_SITEKEY } from '../components/TurnstileWidget'
+import { TurnstileWidget, TURNSTILE_REQUIRED } from '../components/TurnstileWidget'
 import { useT } from '../lib/i18n'
 import { useCooldown } from '../hooks/useCooldown'
 
@@ -73,7 +74,6 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
   // when a sitekey is configured; otherwise the server skips verification.
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
   const [turnstileReset, setTurnstileReset] = useState(0)
-  const turnstileRequired = TURNSTILE_SITEKEY !== ''
 
   /**
    * Runs a passkey login ceremony, then either applies it or, when it would
@@ -146,7 +146,11 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
     setCode('')
     setEnrollToken(null)
     try {
-      const { devCode: dev } = await requestEmailCode(email, mode, turnstileToken)
+      // On native Android there is no Turnstile token; obtain a Play Integrity
+      // token bound to this address instead. Returns null on web, so the request
+      // below simply carries no attestation there.
+      const integrityToken = await getPlayIntegrityToken(email)
+      const { devCode: dev } = await requestEmailCode(email, mode, turnstileToken, integrityToken)
       setDevCode(dev ?? null)
       setStep('code')
       // A code went out (or, in recover mode, the request was accepted): begin
@@ -166,7 +170,7 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
       // The token was single-use and is now spent (siteverify runs before the
       // server's cooldown check). Discard it and re-challenge so a resend on the
       // code step gets a fresh token.
-      if (turnstileRequired) {
+      if (TURNSTILE_REQUIRED) {
         setTurnstileToken(null)
         setTurnstileReset((n) => n + 1)
       }
@@ -305,7 +309,7 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
                 e.key === 'Enter' &&
                 emailValid &&
                 !busy &&
-                (!turnstileRequired || turnstileToken) &&
+                (!TURNSTILE_REQUIRED || turnstileToken) &&
                 void sendCode()
               }
               className="bg-card"
@@ -313,7 +317,7 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
           </label>
           <TurnstileWidget onToken={setTurnstileToken} resetSignal={turnstileReset} />
           <Button
-            disabled={!emailValid || busy || (turnstileRequired && !turnstileToken)}
+            disabled={!emailValid || busy || (TURNSTILE_REQUIRED && !turnstileToken)}
             onClick={() => void sendCode()}
           >
             {t('auth.sendCode')}
@@ -363,7 +367,7 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
           <Button
             variant="ghost"
             disabled={
-              busy || resendCooldown.remainingMs > 0 || (turnstileRequired && !turnstileToken)
+              busy || resendCooldown.remainingMs > 0 || (TURNSTILE_REQUIRED && !turnstileToken)
             }
             onClick={() => void sendCode()}
           >

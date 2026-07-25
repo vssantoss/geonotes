@@ -140,3 +140,132 @@ describe('router', () => {
     expect(await res.json()).toEqual({ sent: true })
   })
 })
+
+// The native (Capacitor) webview loads from https://localhost (Android) or
+// capacitor://localhost (iOS), so its calls to the API are cross-origin and the
+// browser needs CORS headers to let it read the response. The web app is
+// same-origin and must stay unaffected.
+const ANDROID_ORIGIN = 'https://localhost'
+const IOS_ORIGIN = 'capacitor://localhost'
+
+describe('CORS for native origins', () => {
+  it('answers a preflight from the Android origin with the allowed origin and methods', async () => {
+    const res = await app.request(
+      '/api/sync',
+      { method: 'OPTIONS', headers: { Origin: ANDROID_ORIGIN } },
+      fakeEnv(fakeDb().db),
+    )
+    expect(res.status).toBe(204)
+    expect(res.headers.get('access-control-allow-origin')).toBe(ANDROID_ORIGIN)
+    expect(res.headers.get('access-control-allow-methods')).toContain('POST')
+    expect(res.headers.get('access-control-allow-headers')).toContain('Authorization')
+    expect(res.headers.get('access-control-max-age')).toBe('86400')
+  })
+
+  it('answers a preflight from the iOS origin by reflecting that exact origin', async () => {
+    const res = await app.request(
+      '/api/sync',
+      { method: 'OPTIONS', headers: { Origin: IOS_ORIGIN } },
+      fakeEnv(fakeDb().db),
+    )
+    expect(res.status).toBe(204)
+    expect(res.headers.get('access-control-allow-origin')).toBe(IOS_ORIGIN)
+  })
+
+  it('does not grant CORS to a preflight from an untrusted origin', async () => {
+    const res = await app.request(
+      '/api/sync',
+      { method: 'OPTIONS', headers: { Origin: 'https://evil.example' } },
+      fakeEnv(fakeDb().db),
+    )
+    // Still a 204, but with no allow-origin header the browser blocks the request.
+    expect(res.headers.get('access-control-allow-origin')).toBeNull()
+  })
+
+  it('reflects the origin onto a normal response so the WebView can read it', async () => {
+    const res = await app.request(
+      '/api/geocode?lat=999&lng=0',
+      { headers: { Origin: ANDROID_ORIGIN } },
+      fakeEnv(fakeDb().db),
+    )
+    // The route still runs and rejects the coordinates; CORS only adds headers.
+    expect(res.status).toBe(400)
+    expect(res.headers.get('access-control-allow-origin')).toBe(ANDROID_ORIGIN)
+    expect(res.headers.get('vary')).toBe('Origin')
+  })
+
+  it('lets a bearerless native POST clear the origin gate for the login bootstrap', async () => {
+    // Passkey and e-mail sign-in fetch options and post their result before any
+    // bearer exists, from the native origin (https://localhost), which is not
+    // env.ORIGIN. A trusted native origin is no CSRF risk to the cookie (CORS
+    // never grants it Allow-Credentials), so it clears the gate. That it reaches
+    // auth and fails 401 -- not 403 'bad origin' -- is the proof it passed.
+    const res = await app.request(
+      '/api/sync',
+      {
+        method: 'POST',
+        headers: { Origin: ANDROID_ORIGIN, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ops: [], since: null }),
+      },
+      fakeEnv(fakeDb().db),
+    )
+    expect(res.status).toBe(401)
+    // The error response still reflects the origin so the WebView can read it
+    // rather than see an opaque CORS failure.
+    expect(res.headers.get('access-control-allow-origin')).toBe(ANDROID_ORIGIN)
+  })
+
+  it('still rejects a foreign-origin bearerless POST as bad origin', async () => {
+    // The native exemption is an exact allowlist; an arbitrary cross-site origin
+    // with no bearer is still a CSRF attempt against the cookie and stays 403.
+    const res = await app.request(
+      '/api/sync',
+      { method: 'POST', headers: { Origin: 'https://evil.example' } },
+      fakeEnv(fakeDb().db),
+    )
+    expect(res.status).toBe(403)
+    expect(await res.text()).toBe('bad origin')
+  })
+
+  it('lets a bearer-token POST clear the origin gate the cookie flow cannot skip', async () => {
+    // Fix C: a request that authenticates by bearer token cannot be forged
+    // cross-site (a page cannot read the token), so it is exempt from the Origin
+    // check. With no session row behind the token it then fails auth with 401 --
+    // that it is 401 and not 403 'bad origin' is the proof it passed the gate.
+    const res = await app.request(
+      '/api/sync',
+      {
+        method: 'POST',
+        headers: {
+          Origin: ANDROID_ORIGIN,
+          Authorization: 'Bearer some-native-token',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ops: [], since: null }),
+      },
+      fakeEnv(fakeDb().db),
+    )
+    expect(res.status).toBe(401)
+  })
+
+  it('never allows credentialed (cookie) cross-origin sharing', async () => {
+    // No Allow-Credentials header: native auth is a bearer token, not the cookie,
+    // so the web cookie's SameSite/__Host- protections are never relaxed.
+    const res = await app.request(
+      '/api/geocode?lat=999&lng=0',
+      { headers: { Origin: ANDROID_ORIGIN } },
+      fakeEnv(fakeDb().db),
+    )
+    expect(res.headers.get('access-control-allow-credentials')).toBeNull()
+  })
+
+  it('leaves same-origin web responses untouched', async () => {
+    const res = await app.request(
+      '/api/geocode?lat=999&lng=0',
+      { headers: { Origin: ORIGIN } },
+      fakeEnv(fakeDb().db),
+    )
+    expect(res.headers.get('access-control-allow-origin')).toBeNull()
+    expect(res.headers.get('vary')).toBeNull()
+  })
+})

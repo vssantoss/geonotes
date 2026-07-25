@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ACQUIRE_TIMEOUT_MS, watchPosition, type GeoFix } from '../lib/geo'
+import { ACQUIRE_TIMEOUT_MS, watchPosition, type GeoError, type GeoFix } from '../lib/geo'
+import { canWatch, type LocationPermission } from '../lib/location-permission'
 import {
   INITIAL_LOCK_STATE,
   readyFix,
@@ -22,7 +23,7 @@ export interface GeolocationState {
   locked: boolean
   /** Permission, availability or acquisition-timeout error, or null.
       'timeout' means no <= 30 m fix arrived within the acquisition window. */
-  error: 'denied' | 'unavailable' | 'timeout' | null
+  error: GeoError | null
   /** Restarts acquisition after an error or a stale lock. */
   retry: () => void
 }
@@ -35,12 +36,17 @@ export interface GeolocationState {
  *
  * @param active - whether the main screen is the focused screen; controls
  *   the re-acquisition on window focus/visibility with a stale lock.
+ * @param permission - the location permission, or null while it is being read.
+ *   Acquisition waits for it: see the gate in the effect below.
  * @returns the current geolocation state.
  */
-export function useGeolocation(active: boolean): GeolocationState {
+export function useGeolocation(
+  active: boolean,
+  permission: LocationPermission | null,
+): GeolocationState {
   const [state, setState] = useState<LockState>(INITIAL_LOCK_STATE)
   const [fix, setFix] = useState<GeoFix | null>(null)
-  const [error, setError] = useState<'denied' | 'unavailable' | 'timeout' | null>(null)
+  const [error, setError] = useState<GeoError | null>(null)
   const [attempt, setAttempt] = useState(0)
   const stateRef = useRef<LockState>(INITIAL_LOCK_STATE)
   // Epoch ms of the current lock, for the staleness check on refocus.
@@ -58,6 +64,22 @@ export function useGeolocation(active: boolean): GeolocationState {
   }, [])
 
   useEffect(() => {
+    // Nothing may touch navigator.geolocation until the permission question is
+    // settled. On Android the WebView answers that call by launching the system
+    // permission request itself, which would land on top of the app's own
+    // explanation dialog and ask the user cold. null is the check still in
+    // flight, so wait rather than report a failure the user cannot act on.
+    if (permission === null) return
+    if (!canWatch(permission)) {
+      // Approximate location is a grant, just not a usable one. Reporting it as
+      // a refusal would tell the user to allow something they already allowed.
+      setError(permission === 'coarse' ? 'imprecise' : 'denied')
+      return
+    }
+    // A permission that just arrived clears the refusal recorded above; without
+    // this the banner would outlive the grant that fixed it.
+    setError(null)
+
     let refineTimer: ReturnType<typeof setTimeout> | null = null
     let stopped = false
 
@@ -126,8 +148,9 @@ export function useGeolocation(active: boolean): GeolocationState {
       if (refineTimer) clearTimeout(refineTimer)
       clearTimeout(acquireTimer)
     }
-    // `attempt` re-runs acquisition on retry() and on stale-lock refocus.
-  }, [attempt])
+    // `attempt` re-runs acquisition on retry() and on stale-lock refocus;
+    // `permission` starts it as soon as the user grants.
+  }, [attempt, permission])
 
   useEffect(() => {
     if (!active) return

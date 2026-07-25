@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:native": "CAPACITOR_BUILD=1 VITE_API_URL=https://gnotes.vshub.app VITE_PLAY_INTEGRITY_PROJECT_NUMBER=964942669958 pnpm build && cap sync android",
     "preview": "wrangler dev --port 8788 --ip 0.0.0.0",
     "deploy": "pnpm build && wrangler deploy",
     "test": "vitest run",
@@ -13,10 +14,15 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@capacitor/android": "8.4.2",
+    "@capacitor/core": "8.4.2",
+    "@capacitor/geolocation": "8.2.0",
+    "@capgo/capacitor-passkey": "8.4.0",
     "@fontsource-variable/bricolage-grotesque": "5.2.10",
     "@simplewebauthn/browser": "13.3.0",
     "@simplewebauthn/server": "13.3.2",
     "@tailwindcss/vite": "4.3.2",
+    "capacitor-secure-storage-plugin": "0.13.0",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "dexie": "4.4.4",
@@ -30,6 +36,8 @@
     "tailwindcss": "4.3.2"
   },
   "devDependencies": {
+    "@capacitor/assets": "3.0.5",
+    "@capacitor/cli": "8.4.2",
     "@cloudflare/workers-types": "5.20260711.1",
     "@eslint/js": "10.0.1",
     "@types/node": "26.1.1",

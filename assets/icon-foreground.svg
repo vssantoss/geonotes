@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Glyph only (no red backing): the red field becomes the adaptive-icon
+       background layer. Scaled about the glyph's own centre (256,252) and
+       recentred on (256,256).
+
+       This layer is drawn un-inset onto the full 108dp adaptive canvas, of
+       which only the inner 72dp is guaranteed visible, so the artwork has to
+       be shrunk here rather than by the launcher. The glyph spans 383 units of
+       the 512 viewBox (marker tip to notepad foot, stroke included), which is
+       what turns a scale here into a size on the home screen:
+
+         0.82  66dp tall, under 3dp of clearance. Crowded the mask edge.
+         0.70  57dp tall, 7.5dp clearance. What the PWA maskable icon uses.
+         0.64  52dp tall, 10dp clearance. Current, chosen by eye on device.
+
+       Judged on a real launcher rather than from the numbers, so revisit it
+       the same way. Note that 0.64 is deliberately below the PWA maskable's
+       0.70, so the native icon sits slightly smaller than the same app
+       installed from the browser. -->
+  <g transform="translate(256 256) scale(0.64) translate(-256 -252)">
+    <path d="M148 144h216a36 36 0 0 1 36 36v188l-72 72H148a36 36 0 0 1-36-36V180a36 36 0 0 1 36-36z" fill="#fff"/>
+    <path d="M328 440v-72h72z" fill="#fecaca"/>
+    <rect x="152" y="328" width="200" height="16" rx="8" fill="#b91c1c"/>
+    <rect x="152" y="362" width="176" height="16" rx="8" fill="#b91c1c"/>
+    <rect x="152" y="396" width="112" height="16" rx="8" fill="#b91c1c"/>
+    <path d="M256 64c-47 0-86 39-86 86 0 64 86 146 86 146s86-82 86-146c0-47-39-86-86-86z" fill="#f59e0b" stroke="#fff" stroke-width="14" paint-order="stroke"/>
+    <circle cx="256" cy="150" r="32" fill="#fff"/>
+  </g>
+</svg>

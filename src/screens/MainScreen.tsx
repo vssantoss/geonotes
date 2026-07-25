@@ -3,7 +3,7 @@ import { Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { db } from '../lib/db'
-import { distanceMeters, nearbyRadiusMeters, type GeoFix } from '../lib/geo'
+import { distanceMeters, geoErrorKey, nearbyRadiusMeters, type GeoFix } from '../lib/geo'
 import type { GeolocationState } from '../hooks/useGeolocation'
 import { useT } from '../lib/i18n'
 import { AccuracyBadge } from '../components/AccuracyBadge'
@@ -87,8 +87,8 @@ export function MainScreen({
       </div>
 
       {error && (
-        <Notice>
-          {t(error === 'denied' ? 'gps.denied' : error === 'timeout' ? 'gps.timeout' : 'gps.unavailable')}
+        <Notice center>
+          {t(geoErrorKey(error))}
           <Button variant="outline" size="xs" onClick={retry}>
             {t('gps.retry')}
           </Button>

@@ -2,7 +2,7 @@ import { verifyRegistrationResponse } from '@simplewebauthn/server'
 import { isoBase64URL } from '@simplewebauthn/server/helpers'
 import type { RegistrationResponseJSON } from '@simplewebauthn/server'
 import { json, HttpError, route } from '../../../_lib/http'
-import { consumeChallenge } from '../../../_lib/challenge'
+import { consumeChallenge, expectedOrigins } from '../../../_lib/challenge'
 import { requireUser } from '../../../_lib/session'
 import type { Env } from '../../../_lib/env'
 
@@ -33,7 +33,7 @@ export const onRequestPost = route<Env>(async ({ env, request }) => {
   const verification = await verifyRegistrationResponse({
     response: body.response,
     expectedChallenge,
-    expectedOrigin: env.ORIGIN,
+    expectedOrigin: expectedOrigins(env),
     expectedRPID: env.RP_ID,
   })
   if (!verification.verified || !verification.registrationInfo) {
