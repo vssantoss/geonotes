@@ -19,6 +19,7 @@ import { authErrorKey } from '../lib/auth-error'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { TurnstileWidget, TURNSTILE_REQUIRED } from '../components/TurnstileWidget'
 import { useT } from '../lib/i18n'
+import { useBackHandler } from '../hooks/useBackHandler'
 import { useCooldown } from '../hooks/useCooldown'
 
 /** Mirrors the server's RESEND_COOLDOWN_MS: the minimum gap between code sends. */
@@ -80,6 +81,26 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
   // when a sitekey is configured; otherwise the server skips verification.
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
   const [turnstileReset, setTurnstileReset] = useState(0)
+
+  // Back does what the step's own back button does: walk the flow back one
+  // step, and only leave for the main screen from the steps whose button says
+  // so. While a request is in flight every one of those buttons is disabled,
+  // and back is held to the same rule rather than abandoning a ceremony
+  // halfway through.
+  useBackHandler(() => {
+    if (busy) return true
+    if (step === 'code') {
+      setError(null)
+      setStep('email')
+      return true
+    }
+    if (step === 'email') {
+      setError(null)
+      setStep('noPasskey')
+      return true
+    }
+    return false
+  })
 
   /**
    * Runs a passkey login ceremony, then either applies it or, when it would

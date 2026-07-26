@@ -14,7 +14,8 @@ Everything below this section is done except the items collected here. Phase 1 (
 
 ### Polish (not started)
 
-- [ ] Splash screen, status bar, hardware back button, safe-area insets.
+- [x] **Hardware back button.** The app now navigates over the history stack (`src/lib/navigation.ts` + `src/hooks/useNavigation.ts`), so back leaves the editor, Settings and the sign-in flow for the main screen instead of finishing the activity, and only exits from the main screen. `@capacitor/app`'s `backButton` event carries the Android press; note that registering for it takes the button over completely (with no JS listener the plugin swallows the press, with no plugin at all the activity finishes). An open dialog or dropdown takes the press first, bridged to the Escape key the Radix layers already listen for, and a screen with steps of its own can claim it via `useBackHandler` (the sign-in flow walks its steps back). The browser's back button follows the same stack through `popstate`.
+- [ ] Splash screen, status bar, safe-area insets.
 - [ ] Full re-test of auth + sync + passkey on a real device, not just the emulator.
 
 ### Blocked on Play Console
@@ -176,7 +177,7 @@ Scoped 2026-07-22. The WebView cannot run the web WebAuthn ceremony (origin `htt
 
   Reality check (verified 2026-07-20): Turnstile is ALREADY required on `email-request` in production, so this is a functional BLOCKER, not just future hardening. `worker/api/auth/email-request.ts:39` calls `verifyTurnstile`, which throws `403 "turnstile required"` whenever `TURNSTILE_SECRET` is set (`worker/_lib/turnstile.ts:36-40`), and it is set in production. Consequence: once the native app can reach the API (Fix A/B/C), its email sign-in / account-creation flow will 403 until the backend accepts a Play Integrity token as the native alternative on `email-request`. Passkey *login* does not call Turnstile (`passkey-login-options` / `passkey-login`), so a returning passkey user is unaffected; only email-code issuance (new account, email change) is gated. This is why bot resistance cannot simply be deferred to the end for anything involving account creation.
 - [x] Fix the app icon: replaced Capacitor's default launcher icon with the GeoNotes mark. `scripts/generate-native-assets.mjs` rasterises the source PNGs from `public/favicon.svg` (plus a glyph-only foreground SVG scaled into the adaptive safe zone), then `@capacitor/assets generate --android` fans them out. The generated `mipmap-anydpi-v26/ic_launcher*.xml` is edited back to the no-inset adaptive form: the tool insets both layers 16.7%, which would shrink the solid red background into a 66.6% square (transparent corners under a circular mask) and double-shrink the glyph, so the foreground SVG carries the safe-zone padding instead and the background stays full-bleed red. Orphaned Capacitor-default vector drawables (green robot foreground + its bg colour) removed. Verified on emulator: the OS-rendered round adaptive icon shows the full red circle with the glyph inside the safe zone, no transparent corners. Commit `4716fdb`. NOTE: re-running `capacitor-assets` re-adds the insets, so the XML edit must be redone after any regeneration (documented in `scripts/generate-native-assets.mjs`).
-- [ ] Polish: splash screen, status bar, hardware back button, safe-area insets
+- [ ] Polish: splash screen, status bar, safe-area insets (hardware back button done, see Final steps)
 - [ ] Re-test the full auth + sync + passkey flow on a device
 
 ---
