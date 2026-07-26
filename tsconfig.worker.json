@@ -5,6 +5,9 @@
     "target": "ES2022",
     "lib": ["ES2022"],
     "module": "ESNext",
+    // Workers types only, deliberately without @types/node: this is the check
+    // that stops worker code reaching for a Node builtin that would not exist
+    // at the edge. test/ needs Node, which is why it has its own tsconfig.
     "types": ["@cloudflare/workers-types"],
     "skipLibCheck": true,
     "moduleResolution": "bundler",
