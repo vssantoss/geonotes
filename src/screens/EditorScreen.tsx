@@ -98,9 +98,12 @@ export function EditorScreen({
     if (target.kind === 'edit' || !online) return
     if (target.kind === 'new' && !geo.locked) return
     let cancelled = false
-    void reverseGeocode(location.lat, location.lng).then((addr) => {
+    void reverseGeocode(location.lat, location.lng).then((outcome) => {
       if (cancelled) return
-      setAddress(addr)
+      // Both "nowhere" and "unavailable" leave the coordinates on screen. The
+      // difference between them decides whether the sync engine keeps trying
+      // later, not what this line says now.
+      setAddress(outcome.status === 'resolved' ? outcome.address : null)
       setResolving(false)
     })
     return () => {

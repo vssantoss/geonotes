@@ -16,6 +16,19 @@ export interface OutboxEntry {
   owner: string | null
 }
 
+/**
+ * A note the geocoder has already answered "no address here" for. Recorded so
+ * the backfill stops asking about coordinates that genuinely have no address
+ * (mid-ocean, open desert, unmapped ground) instead of retrying them on every
+ * sync forever. Deliberately local-only and never synced: it is a cache of a
+ * question already asked, not a property of the note.
+ */
+export interface AddressMiss {
+  noteId: string
+  /** Epoch ms of the answer, so it can be re-asked once it is old enough. */
+  checkedAt: number
+}
+
 /** Small key/value rows for session token, sync cursor, user e-mail, etc. */
 export interface KvEntry {
   key: string
@@ -27,6 +40,7 @@ class GeoNotesDb extends Dexie {
   notes!: Table<Note, string>
   outbox!: Table<OutboxEntry, string>
   kv!: Table<KvEntry, string>
+  addressMisses!: Table<AddressMiss, string>
 
   constructor() {
     super('geonotes')
@@ -63,6 +77,15 @@ class GeoNotesDb extends Dexie {
             entry.owner = owner
           })
       })
+    // v4 adds the addressMisses table. Nothing to backfill: an empty table
+    // means every address-less note is simply retried once, which is the right
+    // starting point for notes stranded before the backfill covered them.
+    this.version(4).stores({
+      notes: 'id, updatedAt',
+      outbox: 'noteId, queuedAt',
+      kv: 'key',
+      addressMisses: 'noteId',
+    })
   }
 }
 

@@ -26,6 +26,15 @@ const SYNC_ERROR_RETRY_MS = 5 * 60 * 1000
     so a brief blip never raises a banner. */
 const SYNC_ERROR_ALERT_MS = 2 * 60 * 60 * 1000
 
+/** How many address lookups one sync run may make. Nominatim's usage policy
+    allows 1 req/s and the proxy caches by rounded coordinates, so a long
+    backlog is spread over several runs rather than sent in one burst. */
+const ADDRESS_BACKFILL_LIMIT = 20
+/** How long a "no address here" answer stands before it is asked again.
+    Matches the geocode proxy's own cache lifetime: asking sooner could only be
+    answered from that cache with the same result. */
+const MISS_RECHECK_MS = 30 * 24 * 60 * 60 * 1000
+
 let status: SyncStatus = 'idle'
 // When the current run of failures began, or null when the last sync
 // succeeded. Persisted (see KV.syncErrorSince) so the alert threshold measures
@@ -130,9 +139,11 @@ export function scheduleSync(): void {
  * data on its next contact with the server.
  */
 export async function wipeLocalAccountData(): Promise<void> {
-  await db.transaction('rw', db.notes, db.outbox, db.kv, async () => {
+  await db.transaction('rw', db.notes, db.outbox, db.kv, db.addressMisses, async () => {
     await db.notes.clear()
     await db.outbox.clear()
+    // Cached answers about notes that no longer exist here.
+    await db.addressMisses.clear()
     // No account owns notes on this device anymore.
     await kvSet(KV.notesOwnerHash, null)
     // Clear the account link and the account-scoped sync cursor; a later
@@ -241,20 +252,62 @@ export async function syncNow(): Promise<void> {
 }
 
 /**
- * Resolves addresses for queued notes that were created offline, so the
- * upcoming push carries the final payload.
+ * Resolves addresses for notes that have none, so a note written offline stops
+ * showing bare coordinates once a connection is available.
+ *
+ * Every address-less note is a candidate, not only those still in the outbox. A
+ * note created offline is pushed on the first sync after the connection
+ * returns, and its outbox entry is cleared by that push; if the geocoder was
+ * not reachable in that same run (the browser reports itself online the instant
+ * a radio comes back, well before requests succeed) the note used to lose its
+ * only chance and keep its coordinates forever.
+ *
+ * Coordinates the geocoder has answered "nothing here" for are remembered and
+ * skipped, so open ocean costs one request rather than one per sync. That
+ * answer is re-asked after MISS_RECHECK_MS, since the map is redrawn over time
+ * and today's blank is not permanent.
  */
 async function backfillAddresses(): Promise<void> {
-  // .filter() because `op` is not an indexed column; the outbox is tiny.
-  const entries = await db.outbox.filter((e) => e.op === 'upsert').toArray()
-  for (const entry of entries) {
-    const note = await db.notes.get(entry.noteId)
-    if (!note || note.address !== null) continue
-    const address = await reverseGeocode(note.lat, note.lng)
-    if (address) {
-      // Only the address changes; updatedAt moves so other devices pick it up.
-      await db.notes.update(note.id, { address, updatedAt: Date.now() })
+  // .filter() because `address` is not an indexed column.
+  const notes = await db.notes.filter((n) => n.address === null).toArray()
+  if (notes.length === 0) return
+
+  const misses = new Map(
+    (await db.addressMisses.toArray()).map((m) => [m.noteId, m.checkedAt] as const),
+  )
+  const now = Date.now()
+  const owner = await kvGet(KV.notesOwnerHash)
+  let asked = 0
+
+  for (const note of notes) {
+    if (asked >= ADDRESS_BACKFILL_LIMIT) break
+    const missedAt = misses.get(note.id)
+    if (missedAt !== undefined && now - missedAt < MISS_RECHECK_MS) continue
+
+    asked++
+    const outcome = await reverseGeocode(note.lat, note.lng)
+    // Nothing is reachable, so the remaining notes would only repeat this
+    // failure. They keep their place and the next sync picks them up.
+    if (outcome.status === 'unavailable') return
+    if (outcome.status === 'nowhere') {
+      await db.addressMisses.put({ noteId: note.id, checkedAt: Date.now() })
+      continue
     }
+
+    await db.transaction('rw', db.notes, db.outbox, db.addressMisses, async () => {
+      // Only the address changes; updatedAt moves so other devices pick it up.
+      const changed = await db.notes.update(note.id, {
+        address: outcome.address,
+        updatedAt: Date.now(),
+      })
+      if (changed === 0) return // deleted while the lookup was in flight
+      // The note may already have been pushed without its address, in which
+      // case nothing else would ever send it. Queueing an upsert covers that
+      // and merely refreshes the timestamp on an entry that is still pending.
+      await db.outbox.put({ noteId: note.id, op: 'upsert', queuedAt: Date.now(), owner })
+      // A spot that once had no address now has one; drop the stale answer.
+      await db.addressMisses.delete(note.id)
+    })
   }
 }
 

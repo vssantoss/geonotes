@@ -14,6 +14,13 @@ const CACHE_TTL_SECONDS = 30 * 24 * 60 * 60
 /**
  * GET /api/geocode?lat=..&lng=..: resolves coordinates to a short
  * human-readable address via Nominatim.
+ *
+ * A 200 with `address: null` is a definitive answer: Nominatim was asked and
+ * knows of nothing at those coordinates, which is the ordinary result out at
+ * sea or in unmapped terrain. Being unable to ask at all is a 502 instead, so
+ * the client can tell "there is no address here" from "we could not find out"
+ * and only retry the second. The two must not share a response, or every
+ * outage would be recorded as a permanent absence.
  */
 export const onRequestGet = route<Env>(async ({ request }) => {
   const url = new URL(request.url)
@@ -35,7 +42,10 @@ export const onRequestGet = route<Env>(async ({ request }) => {
       `&accept-language=${encodeURIComponent(request.headers.get('Accept-Language') ?? 'en')}`,
     { headers: { 'User-Agent': 'GeoNotes/0.1 (contact: victor@victorsantos.org)' } },
   )
-  if (!upstream.ok) return json({ address: null })
+  // Upstream being down, rate-limiting us or returning a 5xx says nothing about
+  // the coordinates, so it must not be cached and must not reach the client as
+  // an address of null.
+  if (!upstream.ok) throw new HttpError(502, 'geocoder unavailable')
 
   const data = (await upstream.json()) as {
     address?: Record<string, string>
