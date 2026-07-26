@@ -15,6 +15,7 @@ import {
 } from '../lib/auth'
 import { getPlayIntegrityToken } from '../lib/play-integrity'
 import { ApiError } from '../lib/api'
+import { authErrorKey } from '../lib/auth-error'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { TurnstileWidget, TURNSTILE_REQUIRED } from '../components/TurnstileWidget'
 import { useT } from '../lib/i18n'
@@ -24,6 +25,10 @@ import { useCooldown } from '../hooks/useCooldown'
 const RESEND_COOLDOWN_MS = 60 * 1000
 
 type Step = 'start' | 'noPasskey' | 'email' | 'code'
+/** Why the create/recover step is showing: this device offered no passkey at
+    all, or it offered one the server does not know. Both leave the user with
+    the same two ways forward and only change the line above them. */
+type NoPasskeyReason = 'notFound' | 'notLinked'
 /** Whether the email/code flow creates a fresh account or recovers an existing
     one. Both run the same server flow (confirm e-mail, then enrol a passkey);
     the mode only changes the copy shown to the user. */
@@ -48,6 +53,7 @@ type Mode = 'create' | 'recover'
 export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; onCancel: () => void }) {
   const t = useT()
   const [step, setStep] = useState<Step>('start')
+  const [noPasskeyReason, setNoPasskeyReason] = useState<NoPasskeyReason>('notFound')
   const [mode, setMode] = useState<Mode>('create')
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
@@ -87,18 +93,20 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
       try {
         signIn = await passkeyLogin()
       } catch (err) {
-        // Only a failed/absent passkey ceremony drops to the create/recover
-        // offer. A completed ceremony the server rejects (or a network failure)
-        // shows an error instead: the user does have a passkey, so offering to
-        // create an account would be misleading.
+        // Both ways of failing to produce a usable passkey lead to the same two
+        // options, so both drop to the create/recover step and differ only in
+        // the reason shown there. A 401 means the ceremony completed but names a
+        // credential the server has no account for, which is what recovery is
+        // for; anything else (a network failure, a server fault) is not
+        // something creating an account would fix, so it stays put as an error.
         if (err instanceof PasskeyUnavailableError) {
+          setNoPasskeyReason('notFound')
+          setStep('noPasskey')
+        } else if (err instanceof ApiError && err.status === 401) {
+          setNoPasskeyReason('notLinked')
           setStep('noPasskey')
         } else {
-          setError(
-            err instanceof ApiError && err.status === 401
-              ? t('auth.error.passkeyNotRecognized')
-              : t('auth.error.generic'),
-          )
+          setError(t(authErrorKey(err)))
         }
         setBusy(false)
         return
@@ -110,9 +118,9 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
           await finishSignIn(signIn)
           onSignedIn()
         }
-      } catch {
+      } catch (err) {
         await cancelPendingSignIn()
-        setError(t('auth.error.generic'))
+        setError(t(authErrorKey(err)))
       } finally {
         setBusy(false)
       }
@@ -163,7 +171,7 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
         setStep('code')
         resendCooldown.start()
       } else {
-        setError(t('auth.error.generic'))
+        setError(t(authErrorKey(err)))
       }
     } finally {
       setBusy(false)
@@ -193,9 +201,14 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
         setEnrollToken(token)
       } catch (err) {
         setError(
-          err instanceof ApiError && err.status === 401
-            ? t('auth.error.badCode')
-            : t('auth.error.generic'),
+          t(
+            authErrorKey(
+              err,
+              err instanceof ApiError && err.status === 401
+                ? 'auth.error.badCode'
+                : 'auth.error.generic',
+            ),
+          ),
         )
         setBusy(false)
         return
@@ -231,9 +244,9 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
     try {
       await finishSignIn(await createAccountWithPasskey(email, token))
       onSignedIn()
-    } catch {
+    } catch (err) {
       await cancelPendingSignIn()
-      setError(t('auth.error.generic'))
+      setError(t(authErrorKey(err)))
       setBusy(false)
     }
   }
@@ -280,7 +293,21 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
 
       {step === 'noPasskey' && (
         <>
-          <p className="text-center text-sm text-muted-foreground">{t('auth.noPasskeyFound')}</p>
+          {/* A rejected passkey is a failure and reads as one; finding none is
+              just the state of a new device, so it stays in the muted voice. */}
+          <p
+            className={
+              noPasskeyReason === 'notLinked'
+                ? 'text-center text-sm text-destructive'
+                : 'text-center text-sm text-muted-foreground'
+            }
+          >
+            {t(
+              noPasskeyReason === 'notLinked'
+                ? 'auth.error.passkeyNotRecognized'
+                : 'auth.noPasskeyFound',
+            )}
+          </p>
           <Button disabled={busy} onClick={() => openEmailStep('create')}>
             {t('auth.createAccount')}
           </Button>

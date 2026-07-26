@@ -3,6 +3,8 @@ import { Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { deleteAccount } from '@/lib/account'
+import { settingsErrorKey } from '@/lib/auth-error'
+import { useOnline } from '@/hooks/useOnline'
 import { useT } from '@/lib/i18n'
 import { SettingsSection } from './SettingsControls'
 
@@ -14,11 +16,16 @@ import { SettingsSection } from './SettingsControls'
  * the local account data is wiped, after which onDeleted returns the app to its
  * signed-out state.
  *
+ * Deletion has to be recorded server-side before the local wipe, so offline the
+ * button is disabled rather than left to fail halfway; SettingsScreen already
+ * says why once for the whole screen.
+ *
  * @param onDeleted - called once the account has been marked and local data
  *   wiped, so the caller can leave Settings.
  */
 export function DeleteAccountSection({ onDeleted }: { onDeleted: () => void }) {
   const t = useT()
+  const online = useOnline()
   const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -31,8 +38,9 @@ export function DeleteAccountSection({ onDeleted }: { onDeleted: () => void }) {
       await deleteAccount()
       setConfirming(false)
       onDeleted()
-    } catch {
-      setError(t('auth.error.generic'))
+    } catch (err) {
+      const key = settingsErrorKey(err)
+      setError(key && t(key))
       setBusy(false)
       setConfirming(false)
     }
@@ -43,7 +51,7 @@ export function DeleteAccountSection({ onDeleted }: { onDeleted: () => void }) {
       <Button
         variant="outline"
         size="sm"
-        disabled={busy}
+        disabled={busy || !online}
         className="text-destructive hover:text-destructive"
         onClick={() => setConfirming(true)}
       >

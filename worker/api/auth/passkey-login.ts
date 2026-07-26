@@ -61,6 +61,7 @@ export const onRequestPost = route<Env>(async ({ env, request }) => {
     .run()
 
   // Returns the account e-mail plus whichever session transport the caller can
-  // use; issueSessionResponse owns that split.
-  return issueSessionResponse(env, cred.user_id, request, { email: cred.email })
+  // use; issueSessionResponse owns that split. The credential is recorded on the
+  // session so the settings passkey list can badge the one that signed in here.
+  return issueSessionResponse(env, cred.user_id, request, { email: cred.email }, cred.id)
 })

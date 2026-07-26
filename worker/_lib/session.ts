@@ -22,6 +22,9 @@ export const SESSION_REVOKED_REASON = 'session_revoked'
  * @param env - function environment.
  * @param userId - the authenticated user.
  * @param request - request carrying any session that should be rotated away.
+ * @param credentialId - the passkey whose ceremony authorized this sign-in, so
+ *          the settings passkey list can badge it. Omitted only by tests and by
+ *          any future sign-in path that is not a passkey ceremony.
  * @returns the raw opaque token (for the native bearer transport) and the
  *          Set-Cookie value that carries it for the web.
  */
@@ -29,13 +32,15 @@ export async function createSession(
   env: Env,
   userId: string,
   request: Request,
+  credentialId?: string,
 ): Promise<{ token: string; cookie: string }> {
   const token = randomHex(32)
   const now = Date.now()
   // A public per-session id (used to revoke a specific session), plus creation
-  // time, last-seen time and the user agent for the settings sessions list.
+  // time, last-seen time and the user agent for the settings sessions list, and
+  // the credential that signed in for the settings passkey list.
   const insert = env.DB.prepare(
-    'INSERT INTO sessions (token_hash, user_id, expires_at, id, created_at, last_seen, user_agent) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO sessions (token_hash, user_id, expires_at, id, created_at, last_seen, user_agent, credential_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
   ).bind(
     await sha256Hex(token),
     userId,
@@ -44,6 +49,7 @@ export async function createSession(
     now,
     now,
     request.headers.get('User-Agent') ?? null,
+    credentialId ?? null,
   )
   // Opportunistic sweep of sessions past their expiry (revoked tombstones keep
   // their original expiry, so this reclaims them too). Piggybacks on the login
@@ -85,6 +91,7 @@ export async function createSession(
  * @param request - the login request, used to rotate the old session and to
  *          identify a native caller.
  * @param body - endpoint-specific response fields (the token is merged in).
+ * @param credentialId - the passkey whose ceremony authorized this sign-in.
  * @returns the JSON response, with the session cookie attached.
  */
 export async function issueSessionResponse(
@@ -92,8 +99,9 @@ export async function issueSessionResponse(
   userId: string,
   request: Request,
   body: Record<string, unknown>,
+  credentialId?: string,
 ): Promise<Response> {
-  const { token, cookie } = await createSession(env, userId, request)
+  const { token, cookie } = await createSession(env, userId, request, credentialId)
   const response = json({ ...body, ...(isNativeOrigin(request) ? { token } : {}) })
   response.headers.append('Set-Cookie', cookie)
   return response
@@ -178,6 +186,32 @@ export function buildSessionCookie(token: string, maxAge: number): string {
 export async function currentSessionHash(request: Request): Promise<string | null> {
   const token = requestToken(request)
   return token ? sha256Hex(token) : null
+}
+
+/**
+ * Resolves which passkey signed the caller's own session in, so the settings
+ * passkey list can badge it.
+ *
+ * This is the passkey used at sign-in, not one the device is known to still
+ * hold: a session is never re-verified against an authenticator over its
+ * seven-day life, and WebAuthn offers no way to enumerate a device's
+ * credentials without running a full ceremony. Callers must not treat it as
+ * proof the credential is still present.
+ *
+ * @param env - function environment.
+ * @param request - incoming request, already authenticated.
+ * @returns the credential id, or null for a session predating the column.
+ */
+export async function currentSessionCredentialId(
+  env: Env,
+  request: Request,
+): Promise<string | null> {
+  const hash = await currentSessionHash(request)
+  if (!hash) return null
+  const row = await env.DB.prepare('SELECT credential_id FROM sessions WHERE token_hash = ?')
+    .bind(hash)
+    .first<{ credential_id: string | null }>()
+  return row?.credential_id ?? null
 }
 
 /**

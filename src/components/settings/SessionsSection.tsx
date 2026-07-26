@@ -8,6 +8,8 @@ import {
   revokeSession,
   type SessionInfo,
 } from '@/lib/account'
+import { settingsErrorKey } from '@/lib/auth-error'
+import { useOnline } from '@/hooks/useOnline'
 import { deviceLabel } from '@/lib/ua'
 import { useT, useLocale } from '@/lib/i18n'
 import { SettingsSection } from './SettingsControls'
@@ -19,9 +21,14 @@ import { SettingsSection } from './SettingsControls'
  * individually, or all at once via "Sign out all other sessions". Sessions
  * predating the metadata migration have a null id and are only clearable
  * through the bulk action.
+ *
+ * Listing and revoking both need the server, so offline the controls are
+ * disabled and the list load is held back rather than allowed to fail;
+ * SettingsScreen already says why once for the whole screen.
  */
 export function SessionsSection() {
   const t = useT()
+  const online = useOnline()
   const { locale } = useLocale()
   const [sessions, setSessions] = useState<SessionInfo[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -31,19 +38,24 @@ export function SessionsSection() {
   // Whether the "sign out all others" confirmation is open.
   const [confirmOthers, setConfirmOthers] = useState(false)
 
-  /** Loads (or reloads) the session list, surfacing a generic error on failure. */
+  /** Loads (or reloads) the session list, surfacing the failure reason. */
   const reload = async () => {
     try {
       setSessions(await listSessions())
-    } catch {
-      setError(t('auth.error.generic'))
+      // A successful reload clears whatever the previous attempt complained about.
+      setError(null)
+    } catch (err) {
+      const key = settingsErrorKey(err)
+      setError(key && t(key))
     }
   }
 
   useEffect(() => {
-    // One-shot load on mount; reload closes over stable setters only.
-    void reload()
-  }, [])
+    // Loads on mount, and again when connectivity comes back so a section opened
+    // offline fills itself in. Offline the call could only fail, so it is skipped.
+    if (online) void reload()
+    // reload closes over stable setters only, so connectivity is the sole trigger.
+  }, [online])
 
   /**
    * Formats an epoch-ms timestamp as a short localized date, or a dash when the
@@ -62,8 +74,9 @@ export function SessionsSection() {
     try {
       await revokeSession(revokeTarget.id)
       await reload()
-    } catch {
-      setError(t('auth.error.generic'))
+    } catch (err) {
+      const key = settingsErrorKey(err)
+      setError(key && t(key))
     } finally {
       setRevokeTarget(null)
       setBusy(false)
@@ -77,8 +90,9 @@ export function SessionsSection() {
     try {
       await revokeOtherSessions()
       await reload()
-    } catch {
-      setError(t('auth.error.generic'))
+    } catch (err) {
+      const key = settingsErrorKey(err)
+      setError(key && t(key))
     } finally {
       setConfirmOthers(false)
       setBusy(false)
@@ -87,6 +101,9 @@ export function SessionsSection() {
 
   // Whether any revocable (non-current) session exists, to gate the bulk action.
   const hasOthers = sessions?.some((s) => !s.current) ?? false
+
+  // Gate for every control that hits the server.
+  const blocked = busy || !online
 
   return (
     <SettingsSection title={t('sessions.title')} description={t('sessions.description')}>
@@ -117,7 +134,7 @@ export function SessionsSection() {
               <Button
                 variant="ghost"
                 size="sm"
-                disabled={busy}
+                disabled={blocked}
                 onClick={() => setRevokeTarget(session)}
               >
                 {t('sessions.revoke')}
@@ -131,7 +148,7 @@ export function SessionsSection() {
         <Button
           variant="outline"
           size="sm"
-          disabled={busy}
+          disabled={blocked}
           onClick={() => setConfirmOthers(true)}
         >
           {t('sessions.revokeOthers')}

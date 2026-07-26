@@ -73,11 +73,13 @@ export async function updateNoteText(id: string, text: string): Promise<void> {
  * @param id - the note id.
  */
 export async function deleteNote(id: string): Promise<void> {
-  await db.transaction('rw', db.notes, db.outbox, db.kv, async () => {
+  await db.transaction('rw', db.notes, db.outbox, db.kv, db.addressMisses, async () => {
     await db.notes.delete(id)
     // Replaces any pending upsert for this note: deleting an unsynced note
     // results in a delete op the server treats as a harmless no-op.
     await db.outbox.put({ noteId: id, op: 'delete', queuedAt: Date.now(), owner: await currentOwner() })
+    // Nothing left to backfill an address for.
+    await db.addressMisses.delete(id)
   })
   scheduleSync()
 }

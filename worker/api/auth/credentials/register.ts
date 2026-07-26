@@ -40,9 +40,11 @@ export const onRequestPost = route<Env>(async ({ env, request }) => {
     throw new HttpError(401, 'registration not verified')
   }
 
+  // The enrolling device's user agent rides along so the settings list can say
+  // where the passkey came from. Display only; see the 0011 migration.
   const { credential } = verification.registrationInfo
   await env.DB.prepare(
-    'INSERT OR REPLACE INTO credentials (id, user_id, public_key, counter, transports, created_at, label) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    'INSERT OR REPLACE INTO credentials (id, user_id, public_key, counter, transports, created_at, label, user_agent) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
   )
     .bind(
       credential.id,
@@ -52,6 +54,7 @@ export const onRequestPost = route<Env>(async ({ env, request }) => {
       JSON.stringify(credential.transports ?? []),
       Date.now(),
       label,
+      request.headers.get('User-Agent') ?? null,
     )
     .run()
 

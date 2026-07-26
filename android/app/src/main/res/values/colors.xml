@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- The red of the logo's rounded square, and the same value as the PWA
+         manifest's background_color in vite.config.ts. Both splash screens fill
+         with it, so the app opens the same way whether it was installed from the
+         browser or as the APK. Keep the two in step. -->
+    <color name="splash_background">#b91c1c</color>
+</resources>

@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { setSystemBarsAppearance } from './system-bars'
 
 /** An explicit theme choice; the absence of one means "follow the OS". */
 export type ThemeChoice = 'light' | 'dark'
@@ -41,7 +42,8 @@ function systemPrefersDark(): boolean {
 
 /**
  * Applies a resolved appearance to the document: toggles the `.dark` class
- * that drives every token and updates the theme-color meta for browser chrome.
+ * that drives every token, updates the theme-color meta for browser chrome and
+ * tells the native app which way to draw the system bar icons.
  *
  * @param dark - whether dark mode should be shown.
  */
@@ -50,6 +52,9 @@ function applyDark(dark: boolean) {
   document
     .querySelector('meta[name="theme-color"]')
     ?.setAttribute('content', dark ? THEME_COLOR.dark : THEME_COLOR.light)
+  // The meta tag does nothing in the webview, which is edge-to-edge and shows
+  // the page behind bars whose icons only the system can recolor.
+  setSystemBarsAppearance(dark)
 }
 
 const ThemeContext = createContext<{

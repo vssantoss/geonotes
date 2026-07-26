@@ -61,9 +61,11 @@ export const onRequestPost = route<Env>(async ({ env, request, waitUntil }) => {
     throw new HttpError(401, 'registration not verified')
   }
 
+  // The enrolling device's user agent rides along so the settings list can say
+  // where the passkey came from. Display only; see the 0011 migration.
   const { credential } = verification.registrationInfo
   await env.DB.prepare(
-    'INSERT OR REPLACE INTO credentials (id, user_id, public_key, counter, transports, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+    'INSERT OR REPLACE INTO credentials (id, user_id, public_key, counter, transports, created_at, user_agent) VALUES (?, ?, ?, ?, ?, ?, ?)',
   )
     .bind(
       credential.id,
@@ -72,6 +74,7 @@ export const onRequestPost = route<Env>(async ({ env, request, waitUntil }) => {
       credential.counter,
       JSON.stringify(credential.transports ?? []),
       Date.now(),
+      request.headers.get('User-Agent') ?? null,
     )
     .run()
 
@@ -82,6 +85,7 @@ export const onRequestPost = route<Env>(async ({ env, request, waitUntil }) => {
   }
 
   // Signs the new (or recovered) account in straight away, on whichever session
-  // transport the caller can use.
-  return issueSessionResponse(env, user.id, request, { ok: true })
+  // transport the caller can use. The credential just enrolled is the one that
+  // authorized this session, so the settings passkey list can badge it.
+  return issueSessionResponse(env, user.id, request, { ok: true }, credential.id)
 })

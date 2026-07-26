@@ -17,6 +17,19 @@ export interface PasskeyInfo {
   label: string | null
   /** Epoch ms when the passkey was registered. */
   created_at: number
+  /**
+   * Raw user agent of the device that enrolled the passkey, for deriving a
+   * device label. Null for passkeys added before the server recorded it.
+   */
+  user_agent: string | null
+  /**
+   * Whether this is the passkey that signed the current session in. Not a claim
+   * that the device still holds it: the session is never re-verified against an
+   * authenticator. The server refuses to remove this one (403), so the UI hides
+   * its remove button rather than offering an action that cannot succeed. False
+   * for every passkey when the session predates the server recording this.
+   */
+  current: boolean
 }
 
 /** An active session as shown in the settings list. */
