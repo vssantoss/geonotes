@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- From API 31 the platform draws the splash screen itself and ignores the
+         launch theme's android:background, so the red @drawable/splash that
+         values/styles.xml points at is never shown on a modern device. Left
+         unset, windowSplashScreenBackground falls back to the theme's ordinary
+         window background, which is why the app opened on white (or dark grey at
+         night) while the PWA opened on red.
+
+         The icon is deliberately not overridden: the platform default is the
+         launcher icon, whose own background layer is this same red, so it sits
+         seamlessly on the fill and only the glyph reads. That is what the PWA
+         splash shows too.
+
+         android:background is kept alongside it so the window behind the system
+         splash is red as well, leaving no white frame on either side of the
+         handover. -->
+    <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
+        <item name="android:windowSplashScreenBackground">@color/splash_background</item>
+        <item name="android:background">@drawable/splash</item>
+    </style>
+</resources>
