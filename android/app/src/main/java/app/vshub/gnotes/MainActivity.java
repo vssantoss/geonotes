@@ -10,6 +10,9 @@ public class MainActivity extends BridgeActivity {
         // Register the local Play Integrity bridge before the Capacitor bridge
         // starts, so the web layer can call PlayIntegrity.requestToken.
         registerPlugin(PlayIntegrityPlugin.class);
+        // Same for the system bars, which the theme calls into as soon as it
+        // resolves the appearance on first paint.
+        registerPlugin(SystemBarsPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }
