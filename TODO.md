@@ -1,5 +1,9 @@
 # TODO
 
+## Task List
+
+[ ] use the platform's own reverse geocoder instead. Android's android.location.Geocoder and iOS's CLGeocoder are free, keyless, quota-free, and need no attribution — exactly right for coords→address.
+
 ## Pages -> Workers cutover (COMPLETE, kept as a record)
 
 **Finished 2026-07-21, when the `geonotes` Pages project was deleted.** Production is `geonotes-worker` on a Custom Domain, and pushing to `main` builds and deploys it. Nothing below is still to do, and the reversibility this list promised no longer exists: there is no Pages project to fall back to. Kept because the inline findings explain why the current setup is shaped the way it is. Live status lives in `PENDING.md`.

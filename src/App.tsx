@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { MapPin } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -8,6 +8,7 @@ import { hasUnsyncedNotes, signOut } from './lib/auth'
 import { syncNow } from './lib/sync'
 import { useGeolocation } from './hooks/useGeolocation'
 import { useLocationPermission } from './hooks/useLocationPermission'
+import { useNavigation } from './hooks/useNavigation'
 import { useOnline } from './hooks/useOnline'
 import { useSyncStatus } from './hooks/useSyncStatus'
 import { useT } from './lib/i18n'
@@ -21,8 +22,9 @@ import { LocationPermissionDialog } from './components/LocationPermissionDialog'
 import { Notice } from './components/Notice'
 
 /**
- * App shell: routes between the main screen, the editor and the optional
- * sign-in flow with plain state (no router needed for three screens).
+ * App shell: routes between the main screen, the editor, Settings and the
+ * optional sign-in flow over the history stack (see useNavigation), so back
+ * returns to the main screen instead of leaving the app.
  *
  * Signing in is optional. Without a session the app opens straight on the
  * main screen and keeps every note on this device only; signing in later
@@ -39,8 +41,9 @@ export default function App() {
     const draft = readDraft()
     return draft === null ? null : { kind: 'draft', location: draft.location, text: draft.text }
   })
-  const [showAuth, setShowAuth] = useState(false)
-  const [showSettings, setShowSettings] = useState(false)
+  // A restored draft opens the editor above the main screen, so back leaves it
+  // for the notes list like any other way of reaching the editor.
+  const { route, go } = useNavigation(editing === null ? ['main'] : ['main', 'editor'])
   // The nearby/all filter lives here (not in MainScreen) so it survives opening
   // the editor and returning; a fresh app launch remounts App and resets it to
   // nearby.
@@ -51,10 +54,7 @@ export default function App() {
   // Acquisition is gated on the permission: starting a watch first would make
   // the Android WebView raise the system prompt itself, on top of the app's
   // explanation dialog.
-  const geo = useGeolocation(
-    editing === null && !showAuth && !showSettings,
-    locationPermission.permission,
-  )
+  const geo = useGeolocation(route === 'main', locationPermission.permission)
   const [confirmSignOut, setConfirmSignOut] = useState(false)
   // Whether unsynced changes remain when the sign-out dialog opens, so it can
   // warn that removing notes from the device would lose them.
@@ -67,15 +67,22 @@ export default function App() {
   const account = useLiveQuery(async () => (await db.kv.get(KV.userEmail)) ?? null, [], undefined)
   const signedIn = account !== undefined && account !== null
 
-  /**
-   * Leaves the editor. The note has been saved, deleted or abandoned by this
-   * point, so the crash-recovery draft is no longer wanted and must go, or the
-   * next launch would reopen the editor on it.
-   */
-  const closeEditor = () => {
+  // Keeps the editor's route and the note it holds in step, however the screen
+  // is entered or left, so the back press needs no special case.
+  useEffect(() => {
+    if (route === 'editor') {
+      // An editor entry with no note left behind it: the browser's forward
+      // button, after the editor was left. There is nothing to reopen.
+      if (editing === null) go('main')
+      return
+    }
+    // The editor has been left, by saving, deleting, cancelling or pressing
+    // back. The note is settled by this point, so the crash-recovery draft is
+    // no longer wanted and must go, or the next launch would reopen it.
+    if (editing === null) return
     clearDraft()
     setEditing(null)
-  }
+  }, [route, editing, go])
 
   /**
    * Begins sign-out. With no notes on the device there is nothing to keep, so
@@ -107,18 +114,18 @@ export default function App() {
     geo.retry()
   }
 
-  if (showAuth) {
+  if (route === 'auth') {
     return (
       <div className="mx-auto flex min-h-full w-full max-w-xl flex-col pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)]">
-        <AuthScreen onSignedIn={() => setShowAuth(false)} onCancel={() => setShowAuth(false)} />
+        <AuthScreen onSignedIn={() => go('main')} onCancel={() => go('main')} />
       </div>
     )
   }
 
-  if (showSettings) {
+  if (route === 'settings') {
     return (
       <div className="mx-auto flex min-h-full w-full max-w-xl flex-col pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)]">
-        <SettingsScreen signedIn={signedIn} onClose={() => setShowSettings(false)} />
+        <SettingsScreen signedIn={signedIn} onClose={() => go('main')} />
       </div>
     )
   }
@@ -134,9 +141,9 @@ export default function App() {
         {account !== undefined && (
           <AccountMenu
             signedIn={signedIn}
-            onSignIn={() => setShowAuth(true)}
+            onSignIn={() => go('auth')}
             onSignOut={() => void handleSignOut()}
-            onOpenSettings={() => setShowSettings(true)}
+            onOpenSettings={() => go('settings')}
           />
         )}
       </header>
@@ -150,7 +157,7 @@ export default function App() {
       {sync.status === 'unauthorized' && signedIn && (
         <Notice>
           {t('auth.sessionExpired')}
-          <Button variant="outline" size="xs" onClick={() => setShowAuth(true)}>
+          <Button variant="outline" size="xs" onClick={() => go('auth')}>
             {t('auth.signIn')}
           </Button>
         </Notice>
@@ -160,21 +167,27 @@ export default function App() {
       {sync.status === 'revoked' && (
         <Notice>
           {t('auth.signedOutRemotely')}
-          <Button variant="outline" size="xs" onClick={() => setShowAuth(true)}>
+          <Button variant="outline" size="xs" onClick={() => go('auth')}>
             {t('auth.signIn')}
           </Button>
         </Notice>
       )}
 
-      {editing ? (
-        <EditorScreen target={editing} geo={geo} onDone={closeEditor} />
+      {route === 'editor' && editing ? (
+        <EditorScreen target={editing} geo={geo} onDone={() => go('main')} />
       ) : (
         <MainScreen
           geo={{ ...geo, retry: handleRetryLocation }}
           view={view}
           onViewChange={setView}
-          onAdd={(location) => setEditing({ kind: 'new', location })}
-          onOpen={(note) => setEditing({ kind: 'edit', note })}
+          onAdd={(location) => {
+            setEditing({ kind: 'new', location })
+            go('editor')
+          }}
+          onOpen={(note) => {
+            setEditing({ kind: 'edit', note })
+            go('editor')
+          }}
         />
       )}
 

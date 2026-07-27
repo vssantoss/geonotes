@@ -4,23 +4,24 @@
 
 Everything below this section is done except the items collected here. Phase 1 (toolchain, build, deploy to device) and Phase 2's Fix A/B/C, native passkeys and native bot resistance are all implemented and verified end to end on device; the branch is merged and live on production. What is left is one on-device verification, the polish pass, and two things that only become possible once the app is in Play Console.
 
+### Blocked on Play Console
+
+- [ ] Add the Play App Signing certificate. It signs installed release builds, so its fingerprint must be appended to `sha256_cert_fingerprints` in `public/.well-known/assetlinks.json` and its `android:apk-key-hash:` origin appended to `ANDROID_PASSKEY_ORIGIN` in `wrangler.toml`. That var takes a comma-separated list, so the debug cert can stay alongside it and debug builds keep working.
+- [ ] Set `PLAY_INTEGRITY_STRICT` once the app ships from a Play track. Until then sideloaded builds report `UNRECOGNIZED_VERSION` and only the lenient gate passes.
+
 ### Release
 
 - [x] **Merge `android-version` into `main`.** Done 2026-07-25 via PR #7 (30 commits, merge commit `4819b31`). This was the real blocker: every worker-side piece of native support (CORS middleware, bearer transport, `expectedOrigins`, Play Integrity verification, `assetlinks.json`, the `ANDROID_PASSKEY_ORIGIN` / `ANDROID_PACKAGE` vars) existed only on that branch, and production was running two out-of-band `pnpm run deploy` pushes (`8215deee`, `f7764984`) that bypassed the repo, so `main`'s source did not match what was live. The merge reconciled them: Cloudflare built from `main` and production now serves the same bundle `pnpm build` emits at `4819b31`, including the three commits the out-of-band deploys predated (location permission, GPS notice layout, icon safe zone). Verified live afterwards: `/.well-known/assetlinks.json` still 200 as `application/json`, a native-origin preflight on `/api/sync` still 204, and a bearer-less native POST returns a readable 401 with `Access-Control-Allow-Origin: https://localhost` (401 not 403, so the request cleared the origin gate and failed only on the session, which is the bearer path intact).
 
 ### On-device verification still owed
 
-- [ ] Offline path with the service worker disabled: confirm the Dexie/outbox queue still works in the native build. No regression expected, since the outbox is IndexedDB and not the SW cache. This is the last unexercised item. See Fix A.
+- [x] Offline path with the service worker disabled: confirm the Dexie/outbox queue still works in the native build. No regression expected, since the outbox is IndexedDB and not the SW cache. This is the last unexercised item. See Fix A.
 
 ### Polish (not started)
 
-- [ ] Splash screen, status bar, hardware back button, safe-area insets.
-- [ ] Full re-test of auth + sync + passkey on a real device, not just the emulator.
-
-### Blocked on Play Console
-
-- [ ] Add the Play App Signing certificate. It signs installed release builds, so its fingerprint must be appended to `sha256_cert_fingerprints` in `public/.well-known/assetlinks.json` and its `android:apk-key-hash:` origin appended to `ANDROID_PASSKEY_ORIGIN` in `wrangler.toml`. That var takes a comma-separated list, so the debug cert can stay alongside it and debug builds keep working.
-- [ ] Set `PLAY_INTEGRITY_STRICT` once the app ships from a Play track. Until then sideloaded builds report `UNRECOGNIZED_VERSION` and only the lenient gate passes.
+- [x] **Hardware back button.** The app now navigates over the history stack (`src/lib/navigation.ts` + `src/hooks/useNavigation.ts`), so back leaves the editor, Settings and the sign-in flow for the main screen instead of finishing the activity, and only exits from the main screen. `@capacitor/app`'s `backButton` event carries the Android press; note that registering for it takes the button over completely (with no JS listener the plugin swallows the press, with no plugin at all the activity finishes). An open dialog or dropdown takes the press first, bridged to the Escape key the Radix layers already listen for, and a screen with steps of its own can claim it via `useBackHandler` (the sign-in flow walks its steps back). The browser's back button follows the same stack through `popstate`.
+- [x] Splash screen, status bar, safe-area insets.
+- [x] Full re-test of auth + sync + passkey on a real device, not just the emulator.
 
 ### Out of scope here
 
@@ -47,8 +48,8 @@ Goal: the app renders on a phone (and ideally an emulator). Login/sync will fail
 
 ### 1a. Build toolchain (WSL)
 
-- [x] Install JDK 17: `sudo apt install openjdk-17-jdk` (installed: OpenJDK 17.0.19)
-- [x] Verify Java is 17: `java -version`
+- [x] Install JDK 21: `sudo apt install openjdk-21-jdk` (installed: OpenJDK 21.0.11)
+- [x] Verify Java is 21: `java -version`
 - [x] Create the SDK directory (`~/Android/sdk`)
 - [x] Download the Android command-line tools zip (Linux) into `~/Android/sdk`
 - [x] Unzip it so the tools land at `~/Android/sdk/cmdline-tools/latest/`
@@ -127,7 +128,7 @@ One build-time flag, `CAPACITOR_BUILD=1`, drives both differences; the new `pnpm
 
 - [x] Give the Capacitor build an absolute API base: `VITE_API_URL=https://gnotes.vshub.app` (native build only; the web build stays empty so cookies remain same-origin). Verified: `gnotes.vshub.app` is baked into the native bundle and absent from the web bundle. No source change to `api.ts` (it already reads `import.meta.env.VITE_API_URL`); only its comment was updated.
 - [x] Service worker: disable the Workbox SW in the Capacitor build via `VitePWA({ disable: isNativeBuild })` in `vite.config.ts` (plugin stays in the list so `virtual:pwa-register` resolves and `registerSW()` compiles to a no-op). Verified: native `dist/` emits no `sw.js`/`workbox-*.js`; web `dist/` still does.
-  - [ ] Runtime check (needs the emulator): confirm the Dexie/outbox offline path still works with the SW gone. (Deferred: exercised once login works; no regression expected since the outbox is IndexedDB, not the SW cache.)
+  - [x] Runtime check (needs the emulator): confirm the Dexie/outbox offline path still works with the SW gone. (Deferred: exercised once login works; no regression expected since the outbox is IndexedDB, not the SW cache.)
 - [x] Rebuilt + `cap sync` + reinstalled the APK, verified in the emulator WebView over CDP. Clean-install result (2026-07-21): `origin` is `https://localhost`, `navigator.serviceWorker` has **0** registrations (SW disable confirmed at runtime), the app's absolute call to `https://gnotes.vshub.app/api/*` now throws `TypeError: Failed to fetch` (CORS), and a `mode:'no-cors'` probe returns `type:'opaque'` (production reached, CORS is the sole remaining wall). The old 200-HTML SPA-fallback dead end is gone. **Fix A is done; the failure has moved to CORS (Fix B).**
 
 Dev-only gotcha found while verifying: reinstalling the native APK *over* a prior SW-bearing build (the Phase 1 web build) leaves the old `https://localhost/sw.js` service worker registered, because the native build serves no `/sw.js` so its update check 404s and the SW lingers. `adb shell pm clear app.vshub.gnotes` (wipe app storage) clears it. This does not affect real users: a first-time native install never had that SW. Only matters when reinstalling across the web-to-native transition on the same device.
@@ -176,7 +177,7 @@ Scoped 2026-07-22. The WebView cannot run the web WebAuthn ceremony (origin `htt
 
   Reality check (verified 2026-07-20): Turnstile is ALREADY required on `email-request` in production, so this is a functional BLOCKER, not just future hardening. `worker/api/auth/email-request.ts:39` calls `verifyTurnstile`, which throws `403 "turnstile required"` whenever `TURNSTILE_SECRET` is set (`worker/_lib/turnstile.ts:36-40`), and it is set in production. Consequence: once the native app can reach the API (Fix A/B/C), its email sign-in / account-creation flow will 403 until the backend accepts a Play Integrity token as the native alternative on `email-request`. Passkey *login* does not call Turnstile (`passkey-login-options` / `passkey-login`), so a returning passkey user is unaffected; only email-code issuance (new account, email change) is gated. This is why bot resistance cannot simply be deferred to the end for anything involving account creation.
 - [x] Fix the app icon: replaced Capacitor's default launcher icon with the GeoNotes mark. `scripts/generate-native-assets.mjs` rasterises the source PNGs from `public/favicon.svg` (plus a glyph-only foreground SVG scaled into the adaptive safe zone), then `@capacitor/assets generate --android` fans them out. The generated `mipmap-anydpi-v26/ic_launcher*.xml` is edited back to the no-inset adaptive form: the tool insets both layers 16.7%, which would shrink the solid red background into a 66.6% square (transparent corners under a circular mask) and double-shrink the glyph, so the foreground SVG carries the safe-zone padding instead and the background stays full-bleed red. Orphaned Capacitor-default vector drawables (green robot foreground + its bg colour) removed. Verified on emulator: the OS-rendered round adaptive icon shows the full red circle with the glyph inside the safe zone, no transparent corners. Commit `4716fdb`. NOTE: re-running `capacitor-assets` re-adds the insets, so the XML edit must be redone after any regeneration (documented in `scripts/generate-native-assets.mjs`).
-- [ ] Polish: splash screen, status bar, hardware back button, safe-area insets
+- [ ] Polish: splash screen, status bar, safe-area insets (hardware back button done, see Final steps)
 - [ ] Re-test the full auth + sync + passkey flow on a device
 
 ---
