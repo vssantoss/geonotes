@@ -86,10 +86,14 @@ export type Env = {
    * something we can write into the Play Console. For this address alone,
    * `email-request` stores REVIEW_CODE as the code and sends no e-mail; the
    * reviewer then takes the ordinary "recover account" path, which enrols a
-   * passkey onto the pre-made account. Every other address is untouched.
+   * passkey onto the pre-made account. Every other address is untouched, and
+   * this one keeps every rate limit and the attestation check, so the only
+   * things that differ are where the code comes from and that no e-mail goes
+   * out.
    *
-   * Compared case-insensitively against the normalized address. Absent in dev
-   * and after review, which disables the shortcut outright.
+   * Compared case-insensitively against the normalized address. Absent in dev,
+   * which disables the shortcut outright. Kept set between releases, since Play
+   * expects the same access details across updates.
    */
   REVIEW_EMAIL?: string
   /**
@@ -97,6 +101,12 @@ export type Env = {
    * `wrangler secret put REVIEW_CODE`). Meaningless unless REVIEW_EMAIL is also
    * set. Must be exactly six digits, since `email-verify` rejects anything else
    * before it ever reaches the stored hash.
+   *
+   * Six digits is only 10^6 wide and this one does not rotate on its own, so
+   * unlike a mailed code it is a standing secret. What protects it is that the
+   * review address is rate-limited like any other: at most five code writes an
+   * hour, each granting five verification attempts. Worth rotating occasionally
+   * anyway.
    */
   REVIEW_CODE?: string
 }

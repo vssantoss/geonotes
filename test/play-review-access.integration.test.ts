@@ -1,6 +1,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { app } from '../worker/router'
 import { sha256Hex } from '../worker/_lib/crypto'
+import { claimEmailCodeAttempt, issueFixedEmailCode } from '../worker/_lib/email-code'
 import { createTestDb, insertUser, TEST_ORIGIN, type TestDb } from './support/d1'
 import { installTimingSafeEqual } from './support/timing-safe-equal'
 import type { Env } from '../worker/_lib/env'
@@ -11,11 +12,12 @@ import type { Env } from '../worker/_lib/env'
  *
  * Reviewers may not create their own accounts and cannot read our mailbox, so
  * one configured address takes a fixed code instead of an e-mailed one. What
- * matters is that the shortcut reaches all the way to an enroll token, that it
- * cannot be locked out by the abuse controls it deliberately skips, and above
- * all that it stays confined to that single address. Those are properties of
- * the real code rows and the real rate-limit statements, so a fake DB.prepare
- * could not tell whether any of them hold.
+ * matters is that the shortcut reaches all the way to an enroll token, that the
+ * address is still rate-limited like every other (a standing six-digit secret
+ * with the limits lifted would be grindable, and the mechanism is public
+ * source), and above all that it stays confined to that single address. Those
+ * are properties of the real code rows and the real rate-limit statements, so a
+ * fake DB.prepare could not tell whether any of them hold.
  */
 
 const REVIEW_EMAIL = 'review@example.com'
@@ -120,43 +122,68 @@ describe('the review address', () => {
     expect(res.status).toBe(401)
   })
 
-  it('can request repeatedly without hitting the resend cooldown', async () => {
-    // A reviewer retrying must never lock themselves out of the one account
-    // they were given, so the shortcut runs ahead of both abuse controls.
-    for (let i = 0; i < 8; i++) {
-      const res = await post(
-        'email-request',
-        { email: REVIEW_EMAIL, mode: 'recover' },
-        envWithReview(),
-      )
-      expect(res.status).toBe(200)
-    }
+  it('is counted against the per-address request cap like any other', async () => {
+    // The cap is what bounds guessing: it limits how often the attempt counter
+    // can be reset, and unlike the per-source limiter no number of IPs gets
+    // around it. Skipping it for this address would leave a standing six-digit
+    // secret with nothing but a per-IP limit in front of it.
+    await post('email-request', { email: REVIEW_EMAIL, mode: 'recover' }, envWithReview())
 
-    const res = await post(
-      'email-verify',
-      { email: REVIEW_EMAIL, code: REVIEW_CODE },
-      envWithReview(),
-    )
-    expect(res.status).toBe(200)
+    const window = await ctx.db
+      .prepare('SELECT requests FROM email_code_rate_limits WHERE email = ?')
+      .bind(REVIEW_EMAIL)
+      .first<{ requests: number }>()
+    expect(window?.requests).toBe(1)
   })
 
-  it('resets spent guesses on the next request', async () => {
+  it('does not reset spent guesses within the resend cooldown', async () => {
     await post('email-request', { email: REVIEW_EMAIL, mode: 'recover' }, envWithReview())
     for (let i = 0; i < 5; i++) {
       await post('email-verify', { email: REVIEW_EMAIL, code: '000000' }, envWithReview())
     }
-    // The code is burned after five guesses, which a reviewer could reach by
-    // mistyping. Re-requesting has to clear it rather than leave them stuck.
     expect((await storedCode(REVIEW_EMAIL))?.attempts).toBe(5)
 
+    // Re-requesting immediately must not hand out five more guesses, or the
+    // five-attempt limit would be no limit at all for a code that never rotates.
     await post('email-request', { email: REVIEW_EMAIL, mode: 'recover' }, envWithReview())
 
+    expect((await storedCode(REVIEW_EMAIL))?.attempts).toBe(5)
     const res = await post(
       'email-verify',
       { email: REVIEW_EMAIL, code: REVIEW_CODE },
       envWithReview(),
     )
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(401)
+  })
+})
+
+describe('the fixed code under the ordinary cooldown', () => {
+  /**
+   * These drive issueFixedEmailCode directly because the endpoint reads
+   * Date.now(), and the cooldown is the thing under test.
+   */
+  const MINUTE = 60 * 1000
+
+  it('refuses to rewrite within the cooldown', async () => {
+    const now = Date.now()
+    expect(await issueFixedEmailCode(ctx.env, REVIEW_EMAIL, REVIEW_CODE, now)).toBe(true)
+
+    expect(await issueFixedEmailCode(ctx.env, REVIEW_EMAIL, REVIEW_CODE, now + 30 * 1000)).toBe(
+      false,
+    )
+  })
+
+  it('rewrites and clears spent guesses once the cooldown has elapsed', async () => {
+    const now = Date.now()
+    await issueFixedEmailCode(ctx.env, REVIEW_EMAIL, REVIEW_CODE, now)
+    for (let i = 0; i < 5; i++) await claimEmailCodeAttempt(ctx.env, REVIEW_EMAIL, now)
+
+    // A reviewer who mistyped five times waits out the countdown the UI already
+    // shows them, rather than being locked out of the account for good.
+    expect(await issueFixedEmailCode(ctx.env, REVIEW_EMAIL, REVIEW_CODE, now + MINUTE + 1)).toBe(
+      true,
+    )
+    expect((await storedCode(REVIEW_EMAIL))?.attempts).toBe(0)
   })
 
   it('matches the configured address case-insensitively', async () => {

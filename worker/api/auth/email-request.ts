@@ -29,10 +29,12 @@ import type { Env } from '../../_lib/env'
  * flow that reveals an address is free (by succeeding), which requires control
  * of the mailbox, so it cannot be used to enumerate other people's accounts.
  *
- * One address is exempt from all of the above when REVIEW_EMAIL is configured:
- * it takes the fixed REVIEW_CODE and no e-mail is sent, so a Google Play
- * reviewer can sign into a pre-made account without a mailbox. See
- * Env.REVIEW_EMAIL and isReviewAddress below.
+ * When REVIEW_EMAIL is configured, one address differs in exactly two ways: its
+ * code is the fixed REVIEW_CODE rather than a generated one, and no e-mail is
+ * sent, so a Google Play reviewer can sign into a pre-made account without a
+ * mailbox. Every rate limit and the attestation check still apply to it, and its
+ * response is byte-identical to the recover reply. See Env.REVIEW_EMAIL and
+ * isReviewAddress below.
  */
 export const onRequestPost = route<Env>(async ({ env, request, waitUntil }) => {
   await enforceAuthAbuseLimit(env, request)
@@ -65,21 +67,23 @@ export const onRequestPost = route<Env>(async ({ env, request, waitUntil }) => {
   // amortized onto the same requests that grow those tables. Runs after the
   // response so it never adds latency, and never affects this request's result.
   waitUntil(pruneExpiredEmailCodes(env, now))
+  const withinAccountLimit = await claimEmailCodeRequest(env, email, now)
 
-  // The Play review address takes a fixed code and no e-mail. Placed ahead of
-  // both rate limits deliberately: a reviewer poking at the flow would
-  // otherwise hit the 60s resend cooldown or the five-per-hour cap and see an
-  // unexplained failure, which reads as a broken app. Behind the attestation
-  // check above, though, so this is not an address that can drive writes
-  // without passing the same bot check as everyone else. The response matches
-  // the ordinary recover reply exactly, so the shortcut is invisible from
-  // outside.
+  // The Play review address takes a fixed code and no e-mail. It is otherwise
+  // an ordinary address, deliberately: it sits behind the attestation check
+  // above and behind every rate limit, and this branch mirrors the recover
+  // branch below exactly, answering {sent:true} whether or not a code was
+  // actually written. That leaves nothing to distinguish it from outside, which
+  // matters because the mechanism is public source while the address and code
+  // are secrets. A fixed six-digit code is only 10^6 wide and never rotates on
+  // its own, so the cap above and the cooldown inside issueFixedEmailCode are
+  // the only things standing between it and a guesser: together they allow five
+  // fresh attempts at most five times an hour, whatever the source address, and
+  // the per-source enforceAuthAbuseLimit is a separate outer bound.
   if (isReviewAddress(env, email)) {
-    await issueFixedEmailCode(env, email, env.REVIEW_CODE as string, now)
+    if (withinAccountLimit) await issueFixedEmailCode(env, email, env.REVIEW_CODE as string, now)
     return json({ sent: true })
   }
-
-  const withinAccountLimit = await claimEmailCodeRequest(env, email, now)
 
   if (mode === 'recover') {
     // Send a code whenever an account exists for the address. A users row is only
