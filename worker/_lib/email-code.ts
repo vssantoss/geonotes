@@ -58,6 +58,53 @@ export async function claimEmailCodeRequest(env: Env, email: string, now: number
  */
 export async function issueEmailCode(env: Env, email: string, now: number): Promise<string | null> {
   const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, '0')
+  return (await storeEmailCode(env, email, code, now)) ? code : null
+}
+
+/**
+ * Stores a caller-supplied code under the same cooldown as a generated one.
+ *
+ * Backs the Google Play review shortcut (see Env.REVIEW_EMAIL), whose code has
+ * to be something a reviewer can be told in advance rather than something only
+ * a mailbox reveals. Everything else about that address stays ordinary,
+ * deliberately: a fixed six-digit code is only 10^6 wide and is long-lived, so
+ * the cooldown here and the per-address request cap in claimEmailCodeRequest
+ * are what keep it from being ground down. Between them a guesser gets five
+ * fresh attempts at most five times an hour, whatever their source address.
+ *
+ * @param env - function environment.
+ * @param email - canonicalized address.
+ * @param code - the six-digit code to accept for it.
+ * @param now - current epoch timestamp.
+ * @returns true when stored, false when the cooldown has not elapsed.
+ */
+export async function issueFixedEmailCode(
+  env: Env,
+  email: string,
+  code: string,
+  now: number,
+): Promise<boolean> {
+  return await storeEmailCode(env, email, code, now)
+}
+
+/**
+ * Atomically writes a code for an address when its resend cooldown allows.
+ *
+ * The single statement is the cooldown: two concurrent requests cannot both
+ * pass it, and the attempt counter is only ever reset by a write that did.
+ *
+ * @param env - function environment.
+ * @param email - canonicalized address.
+ * @param code - the plaintext code to store the hash of.
+ * @param now - current epoch timestamp.
+ * @returns true when the row was written, false during the cooldown.
+ */
+async function storeEmailCode(
+  env: Env,
+  email: string,
+  code: string,
+  now: number,
+): Promise<boolean> {
   const codeHash = await sha256Hex(`${code}:${email}`)
   const row = await env.DB.prepare(
     `INSERT INTO email_codes (email, code_hash, expires_at, attempts)
@@ -71,7 +118,7 @@ export async function issueEmailCode(env: Env, email: string, now: number): Prom
   )
     .bind(email, codeHash, now + CODE_TTL_MS, CODE_TTL_MS, now - RESEND_COOLDOWN_MS)
     .first<{ code_hash: string }>()
-  return row ? code : null
+  return row !== null
 }
 
 /**

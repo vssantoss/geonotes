@@ -1,5 +1,10 @@
 import { json, HttpError, route } from '../../_lib/http'
-import { claimEmailCodeRequest, issueEmailCode, pruneExpiredEmailCodes } from '../../_lib/email-code'
+import {
+  claimEmailCodeRequest,
+  issueEmailCode,
+  issueFixedEmailCode,
+  pruneExpiredEmailCodes,
+} from '../../_lib/email-code'
 import { getEmailSender } from '../../_lib/email'
 import { enforceAuthAbuseLimit } from '../../_lib/rate-limit'
 import { verifyTurnstile } from '../../_lib/turnstile'
@@ -23,6 +28,13 @@ import type { Env } from '../../_lib/env'
  * to tell whether an address has an account. Creating an account is the only
  * flow that reveals an address is free (by succeeding), which requires control
  * of the mailbox, so it cannot be used to enumerate other people's accounts.
+ *
+ * When REVIEW_EMAIL is configured, one address differs in exactly two ways: its
+ * code is the fixed REVIEW_CODE rather than a generated one, and no e-mail is
+ * sent, so a Google Play reviewer can sign into a pre-made account without a
+ * mailbox. Every rate limit and the attestation check still apply to it, and its
+ * response is byte-identical to the recover reply. See Env.REVIEW_EMAIL and
+ * isReviewAddress below.
  */
 export const onRequestPost = route<Env>(async ({ env, request, waitUntil }) => {
   await enforceAuthAbuseLimit(env, request)
@@ -57,6 +69,22 @@ export const onRequestPost = route<Env>(async ({ env, request, waitUntil }) => {
   waitUntil(pruneExpiredEmailCodes(env, now))
   const withinAccountLimit = await claimEmailCodeRequest(env, email, now)
 
+  // The Play review address takes a fixed code and no e-mail. It is otherwise
+  // an ordinary address, deliberately: it sits behind the attestation check
+  // above and behind every rate limit, and this branch mirrors the recover
+  // branch below exactly, answering {sent:true} whether or not a code was
+  // actually written. That leaves nothing to distinguish it from outside, which
+  // matters because the mechanism is public source while the address and code
+  // are secrets. A fixed six-digit code is only 10^6 wide and never rotates on
+  // its own, so the cap above and the cooldown inside issueFixedEmailCode are
+  // the only things standing between it and a guesser: together they allow five
+  // fresh attempts at most five times an hour, whatever the source address, and
+  // the per-source enforceAuthAbuseLimit is a separate outer bound.
+  if (isReviewAddress(env, email)) {
+    if (withinAccountLimit) await issueFixedEmailCode(env, email, env.REVIEW_CODE as string, now)
+    return json({ sent: true })
+  }
+
   if (mode === 'recover') {
     // Send a code whenever an account exists for the address. A users row is only
     // ever created after an e-mail code was verified for that address (in
@@ -82,6 +110,28 @@ export const onRequestPost = route<Env>(async ({ env, request, waitUntil }) => {
   if (!code) throw new HttpError(429, 'code recently sent')
   return json({ sent: true, ...(env.ENVIRONMENT === 'dev' ? { devCode: code } : {}) })
 })
+
+/**
+ * Reports whether an address is the configured Google Play review address.
+ *
+ * @param env - function environment.
+ * @param email - the canonicalized address being requested.
+ * @returns true when the review shortcut applies to this address.
+ * @throws HttpError(500) when REVIEW_EMAIL matches but REVIEW_CODE is missing
+ *         or is not six digits. Failing loudly beats falling through to the
+ *         normal path, which would silently mail a code to an address nobody
+ *         reads and leave the reviewer stuck with no way to tell why. Only this
+ *         one address can reach the error, so a misconfiguration cannot affect
+ *         a real user.
+ */
+function isReviewAddress(env: Env, email: string): boolean {
+  const reviewEmail = env.REVIEW_EMAIL?.trim().toLowerCase()
+  if (!reviewEmail || reviewEmail !== email) return false
+  if (!/^\d{6}$/.test(env.REVIEW_CODE ?? '')) {
+    throw new HttpError(500, 'review code misconfigured')
+  }
+  return true
+}
 
 /**
  * Generates and sends a fresh code when the address cooldown permits it.
