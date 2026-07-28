@@ -1,5 +1,10 @@
 import { json, HttpError, route } from '../../_lib/http'
-import { claimEmailCodeRequest, issueEmailCode, pruneExpiredEmailCodes } from '../../_lib/email-code'
+import {
+  claimEmailCodeRequest,
+  issueEmailCode,
+  issueFixedEmailCode,
+  pruneExpiredEmailCodes,
+} from '../../_lib/email-code'
 import { getEmailSender } from '../../_lib/email'
 import { enforceAuthAbuseLimit } from '../../_lib/rate-limit'
 import { verifyTurnstile } from '../../_lib/turnstile'
@@ -23,6 +28,11 @@ import type { Env } from '../../_lib/env'
  * to tell whether an address has an account. Creating an account is the only
  * flow that reveals an address is free (by succeeding), which requires control
  * of the mailbox, so it cannot be used to enumerate other people's accounts.
+ *
+ * One address is exempt from all of the above when REVIEW_EMAIL is configured:
+ * it takes the fixed REVIEW_CODE and no e-mail is sent, so a Google Play
+ * reviewer can sign into a pre-made account without a mailbox. See
+ * Env.REVIEW_EMAIL and isReviewAddress below.
  */
 export const onRequestPost = route<Env>(async ({ env, request, waitUntil }) => {
   await enforceAuthAbuseLimit(env, request)
@@ -55,6 +65,20 @@ export const onRequestPost = route<Env>(async ({ env, request, waitUntil }) => {
   // amortized onto the same requests that grow those tables. Runs after the
   // response so it never adds latency, and never affects this request's result.
   waitUntil(pruneExpiredEmailCodes(env, now))
+
+  // The Play review address takes a fixed code and no e-mail. Placed ahead of
+  // both rate limits deliberately: a reviewer poking at the flow would
+  // otherwise hit the 60s resend cooldown or the five-per-hour cap and see an
+  // unexplained failure, which reads as a broken app. Behind the attestation
+  // check above, though, so this is not an address that can drive writes
+  // without passing the same bot check as everyone else. The response matches
+  // the ordinary recover reply exactly, so the shortcut is invisible from
+  // outside.
+  if (isReviewAddress(env, email)) {
+    await issueFixedEmailCode(env, email, env.REVIEW_CODE as string, now)
+    return json({ sent: true })
+  }
+
   const withinAccountLimit = await claimEmailCodeRequest(env, email, now)
 
   if (mode === 'recover') {
@@ -82,6 +106,28 @@ export const onRequestPost = route<Env>(async ({ env, request, waitUntil }) => {
   if (!code) throw new HttpError(429, 'code recently sent')
   return json({ sent: true, ...(env.ENVIRONMENT === 'dev' ? { devCode: code } : {}) })
 })
+
+/**
+ * Reports whether an address is the configured Google Play review address.
+ *
+ * @param env - function environment.
+ * @param email - the canonicalized address being requested.
+ * @returns true when the review shortcut applies to this address.
+ * @throws HttpError(500) when REVIEW_EMAIL matches but REVIEW_CODE is missing
+ *         or is not six digits. Failing loudly beats falling through to the
+ *         normal path, which would silently mail a code to an address nobody
+ *         reads and leave the reviewer stuck with no way to tell why. Only this
+ *         one address can reach the error, so a misconfiguration cannot affect
+ *         a real user.
+ */
+function isReviewAddress(env: Env, email: string): boolean {
+  const reviewEmail = env.REVIEW_EMAIL?.trim().toLowerCase()
+  if (!reviewEmail || reviewEmail !== email) return false
+  if (!/^\d{6}$/.test(env.REVIEW_CODE ?? '')) {
+    throw new HttpError(500, 'review code misconfigured')
+  }
+  return true
+}
 
 /**
  * Generates and sends a fresh code when the address cooldown permits it.

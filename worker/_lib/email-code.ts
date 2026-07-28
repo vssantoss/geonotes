@@ -75,6 +75,42 @@ export async function issueEmailCode(env: Env, email: string, now: number): Prom
 }
 
 /**
+ * Stores a caller-supplied code for an address, ignoring the resend cooldown.
+ *
+ * Backs the Google Play review shortcut (see Env.REVIEW_EMAIL), which needs a
+ * code a reviewer can be told in advance rather than one only a mailbox can
+ * reveal. Unlike issueEmailCode this always writes: no cooldown to wait out and
+ * no null return, so a reviewer retrying can never lock themselves out of the
+ * one account they were given. Resetting `attempts` on every request does
+ * forfeit the guessing limit for this address, which costs nothing when the
+ * code is published to the reviewer anyway, and the per-source
+ * enforceAuthAbuseLimit still applies upstream.
+ *
+ * @param env - function environment.
+ * @param email - canonicalized address.
+ * @param code - the six-digit code to accept for it.
+ * @param now - current epoch timestamp.
+ */
+export async function issueFixedEmailCode(
+  env: Env,
+  email: string,
+  code: string,
+  now: number,
+): Promise<void> {
+  const codeHash = await sha256Hex(`${code}:${email}`)
+  await env.DB.prepare(
+    `INSERT INTO email_codes (email, code_hash, expires_at, attempts)
+     VALUES (?, ?, ?, 0)
+     ON CONFLICT(email) DO UPDATE SET
+       code_hash = excluded.code_hash,
+       expires_at = excluded.expires_at,
+       attempts = 0`,
+  )
+    .bind(email, codeHash, now + CODE_TTL_MS)
+    .run()
+}
+
+/**
  * Atomically spends one verification attempt and returns the stored code hash.
  *
  * @param env - function environment.
