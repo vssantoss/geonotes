@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CheckCircle2, MapPin } from 'lucide-react'
+import { CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -124,8 +124,12 @@ export function DeleteAccountPage() {
     // store listing rather than from the app, so it is the only GeoNotes anyone
     // arriving here has seen, and a narrower column would read as a different site.
     <div className="mx-auto flex min-h-full w-full max-w-xl flex-col gap-4 p-6">
-      <h1 className="flex items-center justify-center gap-2 font-display text-3xl font-bold tracking-tight">
-        <MapPin className="size-7 text-primary" aria-hidden />
+      {/* The app's own icon, the same artwork the account e-mails carry in their
+          header. They embed the PNG because mail clients block SVG; on the web
+          the vector costs nothing and stays sharp. Decorative: the name sits
+          beside it as text. */}
+      <h1 className="flex items-center justify-center gap-3 font-display text-3xl font-bold tracking-tight">
+        <img src="/favicon.svg" alt="" width={44} height={44} className="size-11" />
         {t('app.name')}
       </h1>
 
