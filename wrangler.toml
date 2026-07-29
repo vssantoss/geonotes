@@ -23,7 +23,7 @@ directory = "./dist"
 binding = "ASSETS"
 # This is the default, spelled out because a second document now depends on it:
 # it is what answers /delete-account with delete-account.html, ahead of the SPA
-# fallback below. It also 308s /delete-account.html and /delete-account/ to that
+# fallback below. It also 307s /delete-account.html and /delete-account/ to that
 # one clean URL, which is why the Worker must not map the clean URL itself.
 html_handling = "auto-trailing-slash"
 # Deep links are client-routed, so anything that is not a built asset must come
