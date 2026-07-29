@@ -215,9 +215,13 @@ export function DeleteAccountPage() {
             >
               {t('account.delete')}
             </Button>
-            {/* Resend re-hits email-request, which also needs a Turnstile token, so
-                a fresh challenge runs here for a possible resend. */}
-            <TurnstileWidget onToken={setTurnstileToken} resetSignal={turnstileReset} />
+            {/* Only resend needs a token here: it re-hits email-request, and the
+                one the first send spent is single-use. Confirming the deletion
+                needs none, so the challenge waits until the cooldown has made
+                resend reachable. Same reasoning as AuthScreen's code step. */}
+            {resendCooldown.remainingMs === 0 && (
+              <TurnstileWidget onToken={setTurnstileToken} resetSignal={turnstileReset} />
+            )}
             <Button
               variant="ghost"
               disabled={
