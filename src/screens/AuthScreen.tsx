@@ -3,16 +3,15 @@ import { MapPin } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
-  confirmEmailCode,
   cancelPendingSignIn,
   createAccountWithPasskey,
   finishSignIn,
   passkeyLogin,
   PasskeyUnavailableError,
-  requestEmailCode,
   wouldDisplaceNotes,
   type PendingSignIn,
 } from '../lib/auth'
+import { confirmEmailCode, requestEmailCode } from '../lib/email-code'
 import { getPlayIntegrityToken } from '../lib/play-integrity'
 import { ApiError } from '../lib/api'
 import { authErrorKey } from '../lib/auth-error'

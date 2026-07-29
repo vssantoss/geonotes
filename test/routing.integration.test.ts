@@ -113,3 +113,60 @@ describe('assets router configuration', () => {
     expect(res.headers.get('content-security-policy')).toContain("default-src 'self'")
   })
 })
+
+/**
+ * The public account-deletion page. Its URL is published on the Google Play
+ * listing, so it has to resolve to the right document from a cold visit by
+ * someone who has never used the app.
+ *
+ * It is a second Vite entry, not a screen of the SPA, which is exactly why it
+ * needs a test here. Nothing in the Worker mentions this path: the whole mapping
+ * from /delete-account to the built delete-account.html is html_handling in
+ * wrangler.toml, resolving one step ahead of the single-page-application
+ * fallback that would otherwise answer with the notes list and a 200. Config is
+ * the thing under test, and this is the only place that can see it.
+ */
+describe('the /delete-account page', () => {
+  /** Matches the entry chunk of whichever document was served. */
+  const ENTRY = /\/assets\/(deleteAccount|main)-[A-Za-z0-9._-]+\.js/
+
+  it('serves the deletion document, not the SPA shell', async () => {
+    const res = await get('/delete-account', { headers: { 'Sec-Fetch-Mode': 'navigate' } })
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toContain('text/html')
+    // Asserted on the entry chunk rather than the title, because serveSite
+    // rewrites the title of every document to "GeoNotes Dev" off production, so
+    // the app shell and this page are indistinguishable by it. Which module the
+    // document loads is the real difference between them.
+    expect((await res.text()).match(ENTRY)?.[1]).toBe('deleteAccount')
+  })
+
+  it('lands on the page from a trailing slash too', async () => {
+    // The URL is typed and pasted by hand off the Play listing. Answered by a
+    // redirect to the clean URL rather than directly, hence the follow.
+    const res = await get('/delete-account/', { headers: { 'Sec-Fetch-Mode': 'navigate' } })
+    expect(res.status).toBe(200)
+    expect((await res.text()).match(ENTRY)?.[1]).toBe('deleteAccount')
+  })
+
+  it('lands on the page from the built file name too', async () => {
+    const res = await get('/delete-account.html')
+    expect(res.status).toBe(200)
+    expect((await res.text()).match(ENTRY)?.[1]).toBe('deleteAccount')
+  })
+
+  it('leaves the app shell on every other path', async () => {
+    // The counter-check: resolving this one document must not have cost the SPA
+    // its fallback.
+    const res = await get('/notes/some-id', { headers: { 'Sec-Fetch-Mode': 'navigate' } })
+    expect((await res.text()).match(ENTRY)?.[1]).toBe('main')
+  })
+
+  it('applies the _headers CSP to it as well', async () => {
+    // The page renders the Turnstile widget, which the CSP has to keep allowing.
+    const res = await get('/delete-account')
+    expect(res.headers.get('content-security-policy')).toContain(
+      'https://challenges.cloudflare.com',
+    )
+  })
+})

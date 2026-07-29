@@ -63,6 +63,19 @@ function serviceWorkerKillSwitch(): Plugin {
 }
 
 export default defineConfig({
+  build: {
+    // Two documents, not two apps: index.html is the app, delete-account.html is
+    // the standalone public page Google Play links to for account deletion. It
+    // is a separate entry so it boots without the service worker, Dexie or the
+    // sync loop, none of which it needs and any of which could keep it from
+    // rendering for someone who has already uninstalled the app.
+    rollupOptions: {
+      input: {
+        main: new URL('./index.html', import.meta.url).pathname,
+        deleteAccount: new URL('./delete-account.html', import.meta.url).pathname,
+      },
+    },
+  },
   resolve: {
     // "@/..." import alias used by shadcn/ui components (mirrors tsconfig paths).
     alias: {
@@ -100,7 +113,13 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
         // API calls must never be served from the SW cache; the app's own
         // outbox in IndexedDB is the single source of truth for offline sync.
-        navigateFallbackDenylist: [/^\/api\//],
+        //
+        // /delete-account is its own document, not a screen of the app, so the
+        // navigation fallback must not answer it with the app shell. Without
+        // this entry anyone with the service worker installed (i.e. anyone who
+        // has used the app) would get the notes list at the URL published on
+        // the Google Play listing.
+        navigateFallbackDenylist: [/^\/api\//, /^\/delete-account/],
       },
     }),
     // Native only: the web build's sw.js is the real one, generated above.

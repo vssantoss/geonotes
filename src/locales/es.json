@@ -160,5 +160,15 @@
   "account.deleteDescription": "Elimina permanentemente tu cuenta y todas tus notas.",
   "account.delete": "Eliminar cuenta",
   "account.deleteConfirm": "Tu cuenta y todas tus notas se programarán para eliminarse de forma permanente dentro de 30 días, y se cerrará la sesión en todos los dispositivos. Vuelve a iniciar sesión antes de entonces para cancelarlo. ¿Eliminar tu cuenta?",
-  "account.deleteConfirmYes": "Eliminar mi cuenta"
+  "account.deleteConfirmYes": "Eliminar mi cuenta",
+  "deleteAccount.title": "Elimina tu cuenta",
+  "deleteAccount.whatHappens": "Eliminar tu cuenta de GeoNotes borra de forma permanente:",
+  "deleteAccount.removesNotes": "todas las notas de tu cuenta y los lugares a los que están asociadas",
+  "deleteAccount.removesPasskeys": "todas las claves de acceso registradas en la cuenta",
+  "deleteAccount.removesDevices": "el correo de tu cuenta y todos los dispositivos con la sesión iniciada",
+  "deleteAccount.grace": "No se borra nada de inmediato. Tu cuenta se conserva durante 30 días y luego se elimina definitivamente. Si vuelves a iniciar sesión antes de que pasen esos 30 días, la eliminación se cancela y se restaura todo.",
+  "deleteAccount.inAppHint": "También puedes hacerlo desde la app, en Ajustes → Eliminar cuenta.",
+  "deleteAccount.emailSubtitle": "Introduce el correo de la cuenta que quieres eliminar. Si existe una cuenta con ese correo, enviaremos un código de 6 dígitos para confirmar tu identidad.",
+  "deleteAccount.doneTitle": "Tu cuenta está programada para eliminarse",
+  "deleteAccount.doneBody": "Se eliminará de forma permanente dentro de 30 días, junto con todas tus notas. Se ha cerrado la sesión en todos los dispositivos. ¿Has cambiado de idea? Vuelve a iniciar sesión en la app antes de entonces y no se perderá nada."
 }

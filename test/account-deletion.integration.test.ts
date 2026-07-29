@@ -1,4 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { app } from '../worker/router'
+import { signEnrollToken } from '../worker/_lib/enroll'
 import {
   ABANDONED_ACCOUNT_TTL_MS,
   DELETION_GRACE_MS,
@@ -9,6 +11,7 @@ import {
 import { createSession, requireUser, SESSION_REVOKED_REASON } from '../worker/_lib/session'
 import { claimEmailCodeRequest, issueEmailCode } from '../worker/_lib/email-code'
 import { createTestDb, insertUser, TEST_ORIGIN, type TestDb } from './support/d1'
+import { installTimingSafeEqual } from './support/timing-safe-equal'
 
 /**
  * Account deletion lifecycle, against real SQLite.
@@ -18,6 +21,11 @@ import { createTestDb, insertUser, TEST_ORIGIN, type TestDb } from './support/d1
  * risky parts are both in SQL. The purge resolves its victims through subqueries
  * and deletes the user rows last, so a reordering would silently purge nothing;
  * and cancelling by signing back in is a clause buried in createSession.
+ *
+ * The signed-out entry point (delete-account-by-email, behind the public
+ * /delete-account page) is driven through the router here rather than as a unit
+ * test, for the same reason: what has to hold is that it confines the deletion
+ * to the one account the enroll token names, and that is a WHERE clause.
  */
 
 const USER = 'user-a'
@@ -26,6 +34,10 @@ const KEEPER = 'user-b'
 const KEEPER_EMAIL = 'b@example.com'
 
 let ctx: TestDb
+
+// verifyEnrollToken compares signatures with workerd's timing-safe primitive,
+// which Node does not provide.
+beforeAll(installTimingSafeEqual)
 
 beforeEach(async () => {
   ctx = await createTestDb()
@@ -398,5 +410,107 @@ describe('sessions of a deleted account', () => {
       status: 401,
       message: SESSION_REVOKED_REASON,
     })
+  })
+})
+
+describe('deleting by e-mail, with no session', () => {
+  /**
+   * Posts an enroll token to the signed-out deletion endpoint.
+   *
+   * @param enrollToken Body token, or a non-string to exercise the body check.
+   * @returns The response.
+   */
+  async function postDeleteByEmail(enrollToken: unknown): Promise<Response> {
+    return await app.request(
+      '/api/auth/delete-account-by-email',
+      {
+        method: 'POST',
+        headers: { Origin: TEST_ORIGIN, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enrollToken }),
+      },
+      ctx.env,
+    )
+  }
+
+  it('marks the account the token names, and only that one', async () => {
+    await insertCredential(USER, 'cred-a')
+    await insertCredential(KEEPER, 'cred-b')
+    await createSession(ctx.env, USER, new Request(`${TEST_ORIGIN}/api/sync`))
+    await createSession(ctx.env, KEEPER, new Request(`${TEST_ORIGIN}/api/sync`))
+
+    const res = await postDeleteByEmail(await signEnrollToken(ctx.env, EMAIL))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: true })
+
+    const marked = await ctx.db
+      .prepare('SELECT deletion_requested_at FROM users WHERE id = ?')
+      .bind(USER)
+      .first<{ deletion_requested_at: number | null }>()
+    expect(marked?.deletion_requested_at).toBeTypeOf('number')
+    expect(await count('credentials', 'user_id', USER)).toBe(0)
+    const revoked = await ctx.db
+      .prepare('SELECT COUNT(*) AS n FROM sessions WHERE user_id = ? AND revoked_at IS NOT NULL')
+      .bind(USER)
+      .first<{ n: number }>()
+    expect(revoked?.n).toBe(1)
+
+    // The bystander account is untouched: the token names one address, and the
+    // deletion has to stay confined to it.
+    const keeper = await ctx.db
+      .prepare('SELECT deletion_requested_at FROM users WHERE id = ?')
+      .bind(KEEPER)
+      .first<{ deletion_requested_at: number | null }>()
+    expect(keeper?.deletion_requested_at).toBeNull()
+    expect(await count('credentials', 'user_id', KEEPER)).toBe(1)
+  })
+
+  it('answers identically for an address with no account', async () => {
+    // Holding a mailbox proves nothing about whether it was ever registered, so
+    // the reply must not become the account-existence oracle that the recover
+    // flow is careful not to be.
+    const res = await postDeleteByEmail(await signEnrollToken(ctx.env, 'nobody@example.com'))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: true })
+
+    const rows = await ctx.db
+      .prepare('SELECT COUNT(*) AS n FROM users WHERE deletion_requested_at IS NOT NULL')
+      .first<{ n: number }>()
+    expect(rows?.n).toBe(0)
+  })
+
+  it('rejects a token signed with another secret and deletes nothing', async () => {
+    const forged = await signEnrollToken({ ...ctx.env, AUTH_SECRET: 'other-secret' }, EMAIL)
+
+    const res = await postDeleteByEmail(forged)
+    expect(res.status).toBe(401)
+
+    const marked = await ctx.db
+      .prepare('SELECT deletion_requested_at FROM users WHERE id = ?')
+      .bind(USER)
+      .first<{ deletion_requested_at: number | null }>()
+    expect(marked?.deletion_requested_at).toBeNull()
+  })
+
+  it('rejects an expired token and deletes nothing', async () => {
+    const token = await signEnrollToken(ctx.env, EMAIL)
+    // Only Date is faked: the timers miniflare and fetch rely on stay real.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(Date.now() + 11 * 60 * 1000)
+      const res = await postDeleteByEmail(token)
+      expect(res.status).toBe(401)
+    } finally {
+      vi.useRealTimers()
+    }
+
+    const marked = await ctx.db
+      .prepare('SELECT deletion_requested_at FROM users WHERE id = ?')
+      .bind(USER)
+      .first<{ deletion_requested_at: number | null }>()
+    expect(marked?.deletion_requested_at).toBeNull()
+  })
+
+  it('rejects a request with no token', async () => {
+    expect((await postDeleteByEmail(undefined)).status).toBe(400)
   })
 })

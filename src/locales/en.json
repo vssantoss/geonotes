@@ -160,5 +160,15 @@
   "account.deleteDescription": "Permanently delete your account and all your notes.",
   "account.delete": "Delete account",
   "account.deleteConfirm": "Your account and all your notes will be scheduled for permanent deletion in 30 days, and you'll be signed out on every device. Sign in again before then to cancel. Delete your account?",
-  "account.deleteConfirmYes": "Delete my account"
+  "account.deleteConfirmYes": "Delete my account",
+  "deleteAccount.title": "Delete your account",
+  "deleteAccount.whatHappens": "Deleting your GeoNotes account permanently removes:",
+  "deleteAccount.removesNotes": "every note in your account, and the places they are tied to",
+  "deleteAccount.removesPasskeys": "every passkey registered to the account",
+  "deleteAccount.removesDevices": "your account e-mail address and every signed-in device",
+  "deleteAccount.grace": "Nothing is removed straight away. Your account is kept for 30 days and then deleted for good. Signing in again before those 30 days are up cancels the deletion and restores everything.",
+  "deleteAccount.inAppHint": "You can also do this inside the app, under Settings → Delete account.",
+  "deleteAccount.emailSubtitle": "Enter the e-mail address of the account you want to delete. If an account exists for it, we'll send a 6-digit code to confirm it's you.",
+  "deleteAccount.doneTitle": "Your account is scheduled for deletion",
+  "deleteAccount.doneBody": "It will be permanently deleted in 30 days, along with all of your notes. You've been signed out everywhere. Changed your mind? Sign in again in the app before then and nothing is lost."
 }
