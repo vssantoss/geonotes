@@ -2,7 +2,22 @@
 
 ## Task List
 
-[ ] use the platform's own reverse geocoder instead. Android's android.location.Geocoder and iOS's CLGeocoder are free, keyless, quota-free, and need no attribution — exactly right for coords→address.
+[ ] use the platform's own reverse geocoder instead. Android's android.location.Geocoder and iOS's CLGeocoder are free, keyless, quota-free, and need no attribution — exactly right for coords→address. The current OpenStreetMap Nominatim reverse geocoder is a free service, but it is not intended for high-volume use and has a strict usage policy. It is also slow and sometimes returns unexpected results. The platform-native geocoders are faster, more reliable, and do not require an external API call.
+
+[ ] create a worker cron job to remove all notes associated with the app-review-t3mp@vshub.app account, which is the one used to submit the app to the stores. The account is not intended for real use, and the notes it created are not useful to anyone. The cron job should run once a week, delete all notes associated with that account, and create some notes so when the reviewers open the app they see a few example notes. 
+
+[ ] add a "donate" button inside the About dialog, alongside the existing "Contact" option. It should be a simple link/button pointing to a donation destination so users can support the project. Decide on the provider and keep it lightweight (an external link, no payment handling in-app).
+
+[ ] add jsdom and @testing-library/react so React hooks and screens can be tested. Every testable thing has so far been pushed into a pure module under `src/lib/`, which is why there is no component test tooling at all; the flows that are left genuinely need a host to render into. In rough order of value:
+
+  1. `useCooldown`. Changed on branch `turnstile-only-when-resend-is-possible` with nothing guarding it. With `renderHook` and fake timers: `start()` reports the full duration in the same commit rather than 0 (the exact regression that was fixed), it ticks down, it settles at 0 and clears its deadline, and a second `start()` restarts from full.
+  2. The e-mail/code step machines in `AuthScreen` and `DeleteAccountPage`, which have real branching and no coverage. A 429 from `requestEmailCode` still advances to the code step; clicking Delete opens `ConfirmDialog` and does *not* call the API, only confirming does; the code input strips non-digits and caps at six so a pasted `123-456` works; resend stays disabled while the cooldown runs and while there is no Turnstile token; the widget mounts only once the cooldown has elapsed; an `ApiError` renders a mapped message through `authErrorKey` instead of throwing.
+  3. `TurnstileWidget` lifecycle, against a fake `window.turnstile`: the script injects once across two mounts (the `loaderPromise` dedup), a `resetSignal` bump calls `reset`, unmount calls `remove` and reports `onToken(null)`, and it renders nothing with no sitekey.
+  4. Smaller: `ConfirmDialog` (cancel must not fire confirm) and `ThemeProvider` (applies `.dark`, follows `prefers-color-scheme` given a `matchMedia` stub).
+
+  What it does **not** buy: jsdom does no CSS layout, so nothing about widths, spacing or anything visual is verifiable, and asserting on className strings only tests the source against itself. Real Turnstile solving, WebAuthn ceremonies and service worker behaviour stay out of reach too. Those remain manual checks.
+
+  Config wrinkle worth knowing before starting: the `unit` project in `vitest.config.ts` globs `src/**` and `worker/**` together, and the Worker tests must not run under jsdom. So this means either splitting it into a jsdom UI project and the existing node one, or per-file `@vitest-environment jsdom` docblocks. Related but distinct from the "Security integration tests" section below, which wants jsdom plus `fake-indexeddb` for the client sync logic rather than for components.
 
 ## Pages -> Workers cutover (COMPLETE, kept as a record)
 
