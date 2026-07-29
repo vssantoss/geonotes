@@ -147,115 +147,109 @@ export function DeleteAccountPage() {
         <p>{t('deleteAccount.inAppHint')}</p>
       </section>
 
-      {/* The reading and the doing are sized separately: the copy above is
-          what a Play reviewer opens the page for and wants full width, while
-          the form stays at the max-w-sm of AuthScreen, so an e-mail field is
-          the same width here as it is in the app. */}
-      <div className="mx-auto flex w-full max-w-sm flex-col gap-4">
-        {step === 'email' && (
-          <>
-            <p className="text-sm text-muted-foreground">{t('deleteAccount.emailSubtitle')}</p>
-            <label className="flex flex-col gap-1.5 text-sm font-medium">
-              {t('auth.emailLabel')}
-              <Input
-                type="email"
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                onKeyDown={(e) =>
-                  e.key === 'Enter' &&
-                  emailValid &&
-                  !busy &&
-                  (!TURNSTILE_REQUIRED || turnstileToken) &&
-                  void sendCode()
-                }
-                className="bg-card"
-              />
-            </label>
-            <TurnstileWidget onToken={setTurnstileToken} resetSignal={turnstileReset} />
-            <Button
-              disabled={!emailValid || busy || (TURNSTILE_REQUIRED && !turnstileToken)}
-              onClick={() => void sendCode()}
-            >
-              {t('auth.sendCode')}
-            </Button>
-          </>
-        )}
-
-        {step === 'code' && (
-          <>
-            {/* Recover-mode wording: a code only goes out for a real account, and
-                saying so conditionally is what keeps a probe from learning
-                whether this address has one. */}
-            <p className="text-sm text-muted-foreground">
-              {t('auth.codeSentToRecover', { email })}
-            </p>
-            {devCode && (
-              <p className="text-sm font-medium text-primary">
-                {t('auth.devCode', { code: devCode })}
-              </p>
-            )}
-            <label className="flex flex-col gap-1.5 text-sm font-medium">
-              {t('auth.codeLabel')}
-              <Input
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                maxLength={6}
-                value={code}
-                // Keep only digits so paste/autofill of formatted codes still works.
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                onKeyDown={(e) => e.key === 'Enter' && codeValid && !busy && setConfirming(true)}
-                className="bg-card"
-              />
-            </label>
-            <Button
-              variant="destructive"
-              disabled={!codeValid || busy}
-              onClick={() => setConfirming(true)}
-            >
-              {t('account.delete')}
-            </Button>
-            {/* Only resend needs a token here: it re-hits email-request, and the
-                one the first send spent is single-use. Confirming the deletion
-                needs none, so the challenge waits until the cooldown has made
-                resend reachable. Same reasoning as AuthScreen's code step. */}
-            {resendCooldown.remainingMs === 0 && (
-              <TurnstileWidget onToken={setTurnstileToken} resetSignal={turnstileReset} />
-            )}
-            <Button
-              variant="ghost"
-              disabled={
-                busy || resendCooldown.remainingMs > 0 || (TURNSTILE_REQUIRED && !turnstileToken)
+      {step === 'email' && (
+        <>
+          <p className="text-sm text-muted-foreground">{t('deleteAccount.emailSubtitle')}</p>
+          <label className="flex flex-col gap-1.5 text-sm font-medium">
+            {t('auth.emailLabel')}
+            <Input
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onKeyDown={(e) =>
+                e.key === 'Enter' &&
+                emailValid &&
+                !busy &&
+                (!TURNSTILE_REQUIRED || turnstileToken) &&
+                void sendCode()
               }
-              onClick={() => void sendCode()}
-            >
-              {resendCooldown.remainingMs > 0
-                ? t('auth.resendCodeIn', { s: Math.ceil(resendCooldown.remainingMs / 1000) })
-                : t('auth.resendCode')}
-            </Button>
-            <Button
-              variant="ghost"
-              disabled={busy}
-              onClick={() => {
-                setError(null)
-                setStep('email')
-              }}
-            >
-              {t('auth.back')}
-            </Button>
-          </>
-        )}
+              className="bg-card"
+            />
+          </label>
+          <TurnstileWidget onToken={setTurnstileToken} resetSignal={turnstileReset} />
+          <Button
+            disabled={!emailValid || busy || (TURNSTILE_REQUIRED && !turnstileToken)}
+            onClick={() => void sendCode()}
+          >
+            {t('auth.sendCode')}
+          </Button>
+        </>
+      )}
 
-        {step === 'done' && (
-          <div className="flex flex-col items-center gap-2 rounded-xl border border-border/60 bg-card px-4 py-5 text-center">
-            <CheckCircle2 className="size-7 text-primary" aria-hidden />
-            <p className="font-medium">{t('deleteAccount.doneTitle')}</p>
-            <p className="text-sm text-muted-foreground">{t('deleteAccount.doneBody')}</p>
-          </div>
-        )}
+      {step === 'code' && (
+        <>
+          {/* Recover-mode wording: a code only goes out for a real account, and
+              saying so conditionally is what keeps a probe from learning
+              whether this address has one. */}
+          <p className="text-sm text-muted-foreground">
+            {t('auth.codeSentToRecover', { email })}
+          </p>
+          {devCode && (
+            <p className="text-sm font-medium text-primary">
+              {t('auth.devCode', { code: devCode })}
+            </p>
+          )}
+          <label className="flex flex-col gap-1.5 text-sm font-medium">
+            {t('auth.codeLabel')}
+            <Input
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              value={code}
+              // Keep only digits so paste/autofill of formatted codes still works.
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              onKeyDown={(e) => e.key === 'Enter' && codeValid && !busy && setConfirming(true)}
+              className="bg-card"
+            />
+          </label>
+          <Button
+            variant="destructive"
+            disabled={!codeValid || busy}
+            onClick={() => setConfirming(true)}
+          >
+            {t('account.delete')}
+          </Button>
+          {/* Only resend needs a token here: it re-hits email-request, and the
+              one the first send spent is single-use. Confirming the deletion
+              needs none, so the challenge waits until the cooldown has made
+              resend reachable. Same reasoning as AuthScreen's code step. */}
+          {resendCooldown.remainingMs === 0 && (
+            <TurnstileWidget onToken={setTurnstileToken} resetSignal={turnstileReset} />
+          )}
+          <Button
+            variant="ghost"
+            disabled={
+              busy || resendCooldown.remainingMs > 0 || (TURNSTILE_REQUIRED && !turnstileToken)
+            }
+            onClick={() => void sendCode()}
+          >
+            {resendCooldown.remainingMs > 0
+              ? t('auth.resendCodeIn', { s: Math.ceil(resendCooldown.remainingMs / 1000) })
+              : t('auth.resendCode')}
+          </Button>
+          <Button
+            variant="ghost"
+            disabled={busy}
+            onClick={() => {
+              setError(null)
+              setStep('email')
+            }}
+          >
+            {t('auth.back')}
+          </Button>
+        </>
+      )}
 
-        {error && <p className="text-sm text-destructive">{error}</p>}
-      </div>
+      {step === 'done' && (
+        <div className="flex flex-col items-center gap-2 rounded-xl border border-border/60 bg-card px-4 py-5 text-center">
+          <CheckCircle2 className="size-7 text-primary" aria-hidden />
+          <p className="font-medium">{t('deleteAccount.doneTitle')}</p>
+          <p className="text-sm text-muted-foreground">{t('deleteAccount.doneBody')}</p>
+        </div>
+      )}
+
+      {error && <p className="text-sm text-destructive">{error}</p>}
 
       {confirming && (
         <ConfirmDialog
