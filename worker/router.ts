@@ -12,6 +12,7 @@ import { onRequestDelete as credentialDelete } from './api/auth/credentials/by-i
 import { onRequestPost as credentialRegister } from './api/auth/credentials/register'
 import { onRequestPost as credentialRegisterOptions } from './api/auth/credentials/register-options'
 import { onRequestPost as deleteAccount } from './api/auth/delete-account'
+import { onRequestPost as deleteAccountByEmail } from './api/auth/delete-account-by-email'
 import { onRequestPost as emailChange } from './api/auth/email-change'
 import { onRequestPost as emailChangeRequest } from './api/auth/email-change-request'
 import { onRequestPost as emailRequest } from './api/auth/email-request'
@@ -46,6 +47,7 @@ app.post('/api/sync', sync)
 
 app.post('/api/auth/contact', contact)
 app.post('/api/auth/delete-account', deleteAccount)
+app.post('/api/auth/delete-account-by-email', deleteAccountByEmail)
 app.post('/api/auth/email-change', emailChange)
 app.post('/api/auth/email-change-request', emailChangeRequest)
 app.post('/api/auth/email-request', emailRequest)
@@ -72,4 +74,9 @@ app.delete('/api/auth/sessions/:id', sessionDelete)
 // endpoint into a JSON parse error on the client instead of an ApiError(404).
 app.all('/api/*', () => error(404, 'not found'))
 
+// The public account-deletion page (delete-account.html, its own document rather
+// than a screen of the app) needs no route of its own: html_handling in
+// wrangler.toml resolves /delete-account to it before not_found_handling can
+// answer with the app shell. Mapping the clean URL here instead would loop, as
+// the assets binding redirects /delete-account.html back to /delete-account.
 app.all('*', (c) => serveSite(c.env, c.req.raw))

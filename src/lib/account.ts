@@ -2,7 +2,8 @@ import type { PublicKeyCredentialCreationOptionsJSON } from '@simplewebauthn/bro
 import { passkeyCreate } from './passkey'
 import { apiFetch } from './api'
 import { db, KV, kvGet, kvSet } from './db'
-import { hashAccount, confirmEmailCode } from './auth'
+import { hashAccount } from './auth'
+import { confirmEmailCode } from './email-code'
 import { wipeLocalAccountData } from './sync'
 
 // Account management for an already signed-in user: passkeys, sessions and the

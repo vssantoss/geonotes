@@ -3,16 +3,15 @@ import { MapPin } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
-  confirmEmailCode,
   cancelPendingSignIn,
   createAccountWithPasskey,
   finishSignIn,
   passkeyLogin,
   PasskeyUnavailableError,
-  requestEmailCode,
   wouldDisplaceNotes,
   type PendingSignIn,
 } from '../lib/auth'
+import { confirmEmailCode, requestEmailCode } from '../lib/email-code'
 import { getPlayIntegrityToken } from '../lib/play-integrity'
 import { ApiError } from '../lib/api'
 import { authErrorKey } from '../lib/auth-error'
@@ -409,9 +408,15 @@ export function AuthScreen({ onSignedIn, onCancel }: { onSignedIn: () => void; o
           <Button disabled={!codeValid || busy} onClick={() => void submitCode()}>
             {t('auth.createPasskey')}
           </Button>
-          {/* Resend re-hits email-request, which also needs a Turnstile token, so
-              a fresh challenge runs here for a possible resend. */}
-          <TurnstileWidget onToken={setTurnstileToken} resetSignal={turnstileReset} />
+          {/* Resend re-hits email-request, which needs a Turnstile token of its
+              own: the one the first send spent is single-use. Submitting the
+              code needs none, though (email-verify never checks one), so the
+              challenge waits until the cooldown has actually made resend
+              reachable, rather than sitting under the code field distracting
+              everyone who is about to type six digits and leave. */}
+          {resendCooldown.remainingMs === 0 && (
+            <TurnstileWidget onToken={setTurnstileToken} resetSignal={turnstileReset} />
+          )}
           <Button
             variant="ghost"
             disabled={
