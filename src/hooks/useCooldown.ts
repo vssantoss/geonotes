@@ -29,7 +29,15 @@ export function useCooldown(durationMs: number): { remainingMs: number; start: (
     return () => clearInterval(id)
   }, [deadline])
 
-  const start = useCallback(() => setDeadline(Date.now() + durationMs), [durationMs])
+  // remainingMs is set here as well as in the effect, so the deadline and the
+  // time left land in the same commit. The effect's first tick only runs after
+  // the render that starts the cooldown has painted, so without this the UI
+  // reads 0 for a frame and anything gated on the cooldown flashes into its
+  // idle state before the countdown appears.
+  const start = useCallback(() => {
+    setDeadline(Date.now() + durationMs)
+    setRemainingMs(durationMs)
+  }, [durationMs])
 
   return { remainingMs, start }
 }
